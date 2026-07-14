@@ -442,8 +442,9 @@ tr:hover td{background:var(--bg-hover)}
 
     <!-- ═══ JUGADORES ═══ -->
     <div class="page" id="pg-jugadores">
-      <div class="pg-row">
+      <div class="pg-row" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div><div class="pg-title">Jugadores</div><div class="pg-sub">Buscar, ver y editar jugadores registrados</div></div>
+        <button class="btn btn-pr" onclick="nuevoJugador()" style="font-size:14px;padding:10px 20px;"><i class="fas fa-user-plus"></i> Nuevo Jugador</button>
       </div>
       <div class="fbar">
         <input class="fs" type="text" id="fJugBuscar" placeholder="Buscar por nombre, CI, email..." style="min-width:200px;" onkeydown="if(event.key==='Enter')loadJugadores(1)">
@@ -3387,11 +3388,29 @@ async function editarJugador(id) {
   openModal('mdJugEdit');
 }
 
+function nuevoJugador() {
+  document.getElementById('jugEditId').value = '';
+  document.getElementById('jugEditNombre').value = '';
+  document.getElementById('jugEditApellido').value = '';
+  document.getElementById('jugEditCi').value = '';
+  document.getElementById('jugEditEmail').value = '';
+  document.getElementById('jugEditCel').value = '';
+  document.getElementById('jugEditWhatsapp').value = '';
+  document.getElementById('jugEditSexo').value = 'hombre';
+  document.getElementById('jugEditFechaNac').value = '';
+  document.getElementById('jugEditCiudad').value = '';
+  document.getElementById('jugEditNacionalidad').value = '';
+  document.getElementById('jugEditEstado').value = 'activo';
+  document.getElementById('jugEditTipo').value = 'jugador';
+  document.getElementById('jugEditObs').value = '';
+  document.getElementById('mdJugTitle').textContent = 'Nuevo Jugador';
+  openModal('mdJugEdit');
+}
+
 async function guardarJugador() {
   const id = document.getElementById('jugEditId').value;
   const params = {
-    action: 'editar_jugador',
-    id,
+    action: id ? 'editar_jugador' : 'crear_jugador',
     nombre: document.getElementById('jugEditNombre').value,
     apellido: document.getElementById('jugEditApellido').value,
     ci: document.getElementById('jugEditCi').value,
@@ -3406,6 +3425,7 @@ async function guardarJugador() {
     tipo: document.getElementById('jugEditTipo').value,
     observacion: document.getElementById('jugEditObs').value
   };
+  if (id) params.id = id;
   const r = await api(params);
   if (r.success) {
     closeModal('mdJugEdit');

@@ -1256,6 +1256,35 @@ if ($action === 'editar_jugador') {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// ACTION: crear_jugador — Registrar un nuevo jugador
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'crear_jugador') {
+    $nombre = $mysqli2->real_escape_string(trim(strGet('nombre')));
+    $apellido = $mysqli2->real_escape_string(trim(strGet('apellido')));
+    $ci = $mysqli2->real_escape_string(trim(strGet('ci')));
+    if (!$nombre || !$apellido || !$ci) respErr('Nombre, Apellido y CI son obligatorios');
+
+    $dup = $mysqli2->query("SELECT id FROM _p_usuarios WHERE ci = '{$ci}' LIMIT 1");
+    if ($dup && $dup->num_rows > 0) respErr('Ya existe un jugador con CI ' . $ci);
+
+    $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion'];
+    $cols = []; $vals = [];
+    foreach ($campos as $c) {
+        $v = trim(strGet($c));
+        if ($v !== '') {
+            $cols[] = $c;
+            $vals[] = "'" . $mysqli2->real_escape_string($v) . "'";
+        }
+    }
+    $sql = "INSERT INTO _p_usuarios (" . implode(',', $cols) . ") VALUES (" . implode(',', $vals) . ")";
+    if ($mysqli2->query($sql)) {
+        resp(['success' => true, 'message' => 'Jugador creado', 'id' => $mysqli2->insert_id]);
+    } else {
+        respErr('Error al crear: ' . $mysqli2->error);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // ACTION: buscar_jugador — Busca jugadores por nombre o CI (autocomplete)
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'buscar_jugador') {
