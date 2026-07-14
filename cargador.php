@@ -260,7 +260,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#f0f0f
 .cat-pill.active{border-color:#6366f1;background:rgba(99,102,241,.15);color:#818cf8}
 .cat-pill .cat-count{font-size:10px;background:#252838;padding:2px 6px;border-radius:6px;color:#8b8fa3}
 
-.match-card{background:#1e2130;border:1px solid #2a2d3a;border-radius:12px;margin-bottom:10px;overflow:hidden;transition:all .2s}
+.match-card{background:#1e2130;border:1px solid #2a2d3a;border-radius:12px;margin-bottom:10px;overflow:hidden;transition:all .2s;border-left:3px solid transparent}
+.grp-0 .match-card{border-left-color:#6366f1}
+.grp-1 .match-card{border-left-color:#22c55e}
+.grp-2 .match-card{border-left-color:#3b82f6}
+.grp-3 .match-card{border-left-color:#a855f7}
+.grp-4 .match-card{border-left-color:#ec4899}
+.grp-5 .match-card{border-left-color:#14b8a6}
+.grp-section{margin-bottom:24px}
 .match-card.en-juego{border-color:rgba(239,68,68,.5);box-shadow:0 0 12px rgba(239,68,68,.15)}
 .match-card.finalizado{opacity:.7}
 .match-card.finalizado:hover{opacity:1}
@@ -459,9 +466,11 @@ async function loadPartidos(catId, catNombre){
 
   var html='';
   var gKeys=Object.keys(groups).sort(function(a,b){return a-b});
+  var gIdx=0;
   gKeys.forEach(function(gId){
     var grp=groups[gId];
     var ph=phaseClass(grp.etiqueta);
+    html+='<div class="grp-section grp-'+((gIdx++)%6)+'">';
     html+='<div class="group-label gl-'+ph+'">'+grp.label+'</div>';
     grp.partidos.forEach(function(p){
       var tieneRes=(parseInt(p.rusultado_equipo1)>0||parseInt(p.resultado_equipo2)>0);
@@ -534,6 +543,7 @@ async function loadPartidos(catId, catNombre){
       }
       html+='</div></div>';
     });
+    html+='</div>';
   });
   document.getElementById('matchCards').innerHTML=html||'<div class="empty">Sin partidos para esta categoria</div>';
 }
