@@ -1,0 +1,5 @@
+- [BeachTennis Project](project_beachtennis.md) — SaaS Factory V4 setup for BeachTennis app, repo cloned from GitHub
+- [User Profile](user_rolando.md) — Rolando, builds SaaS apps using SaaS Factory V4 pattern
+- [Sesión 2026-07-02](project_sesion_2026-07-02.md) — UI matriz puntajes, recálculo ranking evento 12, fix pills categorías en todos-vs-todos
+- [Sesión 2026-07-03](project_sesion_2026-07-03.md) — Fix CI auto-lookup inscripción: .htaccess QSA + FEPARPA disabled
+- [Sesión 2026-07-06](project_sesion_2026-07-06.md) — Sync completa desde memoria raíz: estado al 2026-07-03, CRUD puntajes, ranking, CI fix
