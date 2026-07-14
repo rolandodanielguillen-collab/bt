@@ -3434,8 +3434,8 @@ async function guardarJugador() {
 
 // ═══ ADMINISTRADORES CRUD ═══
 async function loadAdmins(){
-  const r=await fetch(API+'?action=list_admins').then(r=>r.json());
-  if(!r.success)return;
+  const r=await api({action:'list_admins'});
+  if(!r.success){ showToast(r.error||'Error al cargar admins','error'); return; }
   const tb=document.getElementById('tbAdmins');
   tb.innerHTML='';
   r.admins.forEach(function(a){
@@ -3463,29 +3463,26 @@ async function loadAdmins(){
   });
 }
 
-function editAdmin(id){
-  fetch(API+'?action=get_admin&id='+id).then(r=>r.json()).then(function(r){
-    if(!r.success)return;
-    document.getElementById('admId').value=r.admin.id;
-    document.getElementById('admUser').value=r.admin.usuario;
-    document.getElementById('admPass').value=r.admin.pase;
-    document.getElementById('admTipo').value=r.admin.tipo;
-    document.getElementById('modalAdminTitle').innerHTML='<i class="fas fa-user-shield" style="margin-right:8px;color:var(--accent);"></i>Editar Admin';
-    openModal('modalAdmin');
-  });
+async function editAdmin(id){
+  const r = await api({action:'get_admin', id});
+  if(!r.success){ showToast(r.error||'Error al cargar admin','error'); return; }
+  document.getElementById('admId').value=r.admin.id;
+  document.getElementById('admUser').value=r.admin.usuario;
+  document.getElementById('admPass').value=r.admin.pase;
+  document.getElementById('admTipo').value=r.admin.tipo;
+  document.getElementById('modalAdminTitle').innerHTML='<i class="fas fa-user-shield" style="margin-right:8px;color:var(--accent);"></i>Editar Admin';
+  openModal('modalAdmin');
 }
 
 async function saveAdmin(){
   var id=document.getElementById('admId').value;
-  var data={
+  var r=await api({
     action: id ? 'update_admin' : 'create_admin',
     id: id||'',
     usuario: document.getElementById('admUser').value,
     pase: document.getElementById('admPass').value,
     tipo: document.getElementById('admTipo').value
-  };
-  var params=Object.keys(data).map(function(k){return k+'='+encodeURIComponent(data[k])}).join('&');
-  var r=await fetch(API+'?'+params).then(r=>r.json());
+  });
   if(r.success){
     closeModal('modalAdmin');
     document.getElementById('admId').value='';
@@ -3501,9 +3498,9 @@ async function saveAdmin(){
 
 async function deleteAdmin(id, nombre){
   if(!confirm('Eliminar admin "'+nombre+'"?'))return;
-  var r=await fetch(API+'?action=delete_admin&id='+id).then(r=>r.json());
-  if(r.success) loadAdmins();
-  else alert(r.error||'Error');
+  var r=await api({action:'delete_admin', id});
+  if(r.success){ showToast('Admin eliminado','success'); loadAdmins(); }
+  else showToast(r.error||'Error al eliminar','error');
 }
 
 async function openAsignar(adminId, nombre){
