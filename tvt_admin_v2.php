@@ -7,6 +7,69 @@
  * Original: tvt_admin.php (sin modificar, como respaldo)
  * ================================================================
  */
+session_start();
+include_once "db/conection.inc.php";
+
+// -- LOGOUT --
+if (isset($_GET['logout'])) { session_destroy(); header('Location: tvt_admin_v2.php'); exit; }
+
+// -- LOGIN POST --
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario'], $_POST['pase'])) {
+    $u = $mysqli2->real_escape_string(trim($_POST['usuario']));
+    $p = $mysqli2->real_escape_string(trim($_POST['pase']));
+    $r = $mysqli2->query("SELECT id, usuario, tipo FROM _usuario_admin WHERE usuario='$u' AND pase='$p' LIMIT 1");
+    if ($r && $r->num_rows > 0) {
+        $admin = $r->fetch_assoc();
+        $_SESSION['admin_id'] = $admin['id'];
+        $_SESSION['admin_user'] = $admin['usuario'];
+        $_SESSION['admin_tipo'] = $admin['tipo'];
+        header('Location: tvt_admin_v2.php');
+        exit;
+    }
+    $loginError = 'Usuario o contraseña incorrectos';
+}
+
+// -- NO LOGUEADO -> mostrar login --
+if (!isset($_SESSION['admin_id'])):
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BT Admin — Login</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans','Segoe UI',system-ui,sans-serif;background:#0f1117;color:#f0f0f5;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-box{background:#1a1d27;border:1px solid #2a2d3a;border-radius:16px;padding:40px;width:90%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.login-box h1{font-size:20px;margin-bottom:6px;text-align:center}
+.login-box p{font-size:12px;color:#8b8fa3;text-align:center;margin-bottom:24px}
+.fg{margin-bottom:16px}
+.fg label{display:block;font-size:12px;font-weight:600;color:#8b8fa3;margin-bottom:6px}
+.fg input{width:100%;padding:10px 14px;background:#252838;border:1px solid #333648;border-radius:8px;color:#f0f0f5;font-size:14px;outline:none}
+.fg input:focus{border-color:#6366f1}
+.btn-login{width:100%;padding:12px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s}
+.btn-login:hover{background:#818cf8}
+.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:10px;border-radius:8px;font-size:12px;margin-bottom:16px;text-align:center}
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h1><i class="fas fa-volleyball-ball" style="color:#6366f1;margin-right:8px;"></i>BT Admin v2</h1>
+  <p>Ingresa tus credenciales de administrador</p>
+  <?php if(isset($loginError)):?><div class="error"><?=$loginError?></div><?php endif;?>
+  <form method="post">
+    <div class="fg"><label>Usuario</label><input name="usuario" required autofocus></div>
+    <div class="fg"><label>Contraseña</label><input name="pase" type="password" required></div>
+    <button class="btn-login" type="submit"><i class="fas fa-sign-in-alt"></i> Ingresar</button>
+  </form>
+</div>
+</body>
+</html>
+<?php exit; endif;
+$adminUser = $_SESSION['admin_user'];
+$adminTipo = $_SESSION['admin_tipo'];
 ?>
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
@@ -287,10 +350,11 @@ tr:hover td{background:var(--bg-hover)}
     <div class="nav-i" onclick="toggleTheme()"><i class="fas fa-adjust"></i> Cambiar tema</div>
     <a class="nav-i" href="tvt_admin.php" style="text-decoration:none"><i class="fas fa-arrow-left"></i> TVT Admin v1</a>
     <a class="nav-i" href="tvt_plantillas.php" style="text-decoration:none"><i class="fas fa-cogs"></i> Plantillas TVT</a>
+    <a class="nav-i" href="?logout" style="text-decoration:none;color:var(--danger);"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
   </div>
   <div class="sb-foot">
-    <div class="avatar">SA</div>
-    <div><div style="font-size:13px;font-weight:600;">Super Admin</div><div style="font-size:11px;color:var(--success);"><i class="fas fa-circle" style="font-size:7px;margin-right:4px;"></i>En línea</div></div>
+    <div class="avatar"><?=strtoupper(substr($adminUser,0,2))?></div>
+    <div><div style="font-size:13px;font-weight:600;"><?=htmlspecialchars($adminUser)?></div><div style="font-size:11px;color:var(--success);"><i class="fas fa-circle" style="font-size:7px;margin-right:4px;"></i><?=$adminTipo?></div></div>
   </div>
 </aside>
 

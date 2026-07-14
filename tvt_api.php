@@ -6,9 +6,16 @@
  * Uso: tvt_api.php?action=kpis  o  tvt_api.php?action=eventos
  * ================================================================
  */
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
+
+// ── Auth check ──────────────────────────────────────────────────
+if (!isset($_SESSION['admin_id'])) {
+    echo json_encode(['success' => false, 'error' => 'No autenticado']);
+    exit;
+}
 
 // ── Conexión BD ──────────────────────────────────────────────────
 if (file_exists("db/conection.inc.php")) {
