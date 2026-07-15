@@ -427,6 +427,11 @@ if ($action === 'guardar_resultado') {
         }
     }
 
+    // Recalcular clasificacion y propagar grupo->eliminatoria
+    if ($partido && $partido["grupo"] < 13) {
+        @file_get_contents("http://bt.com.py/logica/cargar.auxiliar.v2-parte2.php?evento=" . (int)$ev);
+    }
+
     resp(['success' => true, 'mensaje' => 'Resultado guardado' . ($propagado ? ' y propagado' : '')]);
 }
 
