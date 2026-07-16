@@ -93,6 +93,10 @@ if (isset($_GET['api'])) {
                 if($r&&$r->num_rows>0){$n=$r->fetch_assoc();propagarJugador($mysqli2,$n['id'],'ci2',$ci_p_a,$ci_p_b);$propagado=true;}
             }
         }
+        // Recalcular clasificacion grupo->eliminatoria
+        if ($partido && $partido["grupo"] < 13) {
+            @exec("php /home/bt.com.py/public_html/logica/run-parte2.php " . (int)$ev . " > /dev/null 2>&1 &");
+        }
         echo json_encode(['success'=>true,'propagado'=>$propagado]);
         exit;
     }

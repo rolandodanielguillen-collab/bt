@@ -429,7 +429,8 @@ if ($action === 'guardar_resultado') {
 
     // Recalcular clasificacion y propagar grupo->eliminatoria
     if ($partido && $partido["grupo"] < 13) {
-        @file_get_contents("http://bt.com.py/logica/cargar.auxiliar.v2-parte2.php?evento=" . (int)$ev);
+        // ponytail: CLI wrapper avoids HTTP vhost/Cloudflare issues
+        @exec("php /home/bt.com.py/public_html/logica/run-parte2.php " . (int)$ev . " > /dev/null 2>&1 &");
     }
 
     resp(['success' => true, 'mensaje' => 'Resultado guardado' . ($propagado ? ' y propagado' : '')]);
