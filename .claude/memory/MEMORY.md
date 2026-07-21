@@ -3,3 +3,5 @@
 - [Sesión 2026-07-02](project_sesion_2026-07-02.md) — UI matriz puntajes, recálculo ranking evento 12, fix pills categorías en todos-vs-todos
 - [Sesión 2026-07-03](project_sesion_2026-07-03.md) — Fix CI auto-lookup inscripción: .htaccess QSA + FEPARPA disabled
 - [Sesión 2026-07-06](project_sesion_2026-07-06.md) — Sync completa desde memoria raíz: estado al 2026-07-03, CRUD puntajes, ranking, CI fix
+- [Sesión 2026-07-18](project_sesion_2026-07-18.md) — PERF: ranking 12s→0.12s (15,100→13 q), fixture 2.1s→0.10s (gate _tabla_parejas), llaves 0.27s→0.12s; 3 backups .bak-20260718 en VPS; commits 768d8de/f8cebd3/2e80a05
+- [Sesión 2026-07-21](project_sesion_2026-07-21.md) — Fix ranking por SETS (no games) + bracket muestra 3 sets + salvaguarda grupos + orden torneos por fecha real
