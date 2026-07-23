@@ -25,7 +25,7 @@ const Header = () => {
       setMobileMenuOpen(false);
       return;
     }
-    
+
     const element = document.getElementById(sectionId);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -38,7 +38,7 @@ const Header = () => {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <button 
+          <button
             onClick={() => {
               navigate('/');
               setTimeout(() => {
