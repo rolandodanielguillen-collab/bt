@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# BeachTennis es un repo git propio: se versiona solo, no desde aca (2026-07-23)
+BeachTennis/
