@@ -814,6 +814,7 @@ tr:hover td{background:var(--bg-hover)}
             <select class="fs" id="evUrlFixture">
               <option value="grafico-llaves" selected>grafico-llaves</option>
               <option value="grafico-llaves-v2">grafico-llaves-v2</option>
+              <option value="grafico-interclubes">grafico-interclubes (por clubes)</option>
             </select>
           </div>
         </div>
@@ -2655,6 +2656,9 @@ function toggleTabClubes() {
   head.style.display = esInterclubes() ? '' : 'none';
   // En Interclubes el formulario de inscripción es el de clubes: la versión v1/v2 no aplica
   document.getElementById('fgVersionForm').style.display = esInterclubes() ? 'none' : '';
+  // Vista pública propia de interclubes (solo si sigue en el default)
+  const fx = document.getElementById('evUrlFixture');
+  if (esInterclubes() && fx.value === 'grafico-llaves') fx.value = 'grafico-interclubes';
   if (!esInterclubes() && evTabActual === 6) switchEvTab(5, null);
 }
 
