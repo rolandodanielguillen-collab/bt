@@ -105,6 +105,21 @@ club puede quitar parejas hasta el cierre.
 - Verificado con pareja temporal (luego borrada): contador, categoría y nombres OK.
   Evento 15 hoy: 0 inscripciones reales (las pruebas del usuario fueron quitadas).
 
+## Sorteo público + enfrentamientos (commit 956f153, LIVE)
+- Modelo (ref ARCHIVOS/SORTEO.jpeg): sorteo POR CATEGORÍA, 2 grupos de 3 CLUBES,
+  round robin dentro del grupo (misma lógica que grupos de 3 parejas del TVT).
+- Tabla `_ic_sorteo` (id_evento, id_categoria, id_club, grupo, posicion; UNIQUE ev+cat+club).
+- `interclubes_sorteo.php?evento=N` (requiere sesión admin): pills de categorías (con nº
+  de clubes inscriptos), pool "por sortear" con botones →G1/→G2, posición = orden de
+  salida del sorteo en vivo, quitar (recompacta posiciones), limpiar categoría,
+  preview de enfrentamientos. Constantes IC_GRUPOS=2, IC_CLUBES_POR_GRUPO=3 (ponytail).
+- Vista pública grafico-interclubes: pestaña "Sorteo" (default si hay datos) — por
+  categoría, tablas Grupo 1|Grupo 2 con clubes numerados + enfrentamientos VS por grupo.
+- Admin: botón "Sorteo" en pestaña Clubes abre la pantalla en otra tab.
+- Verificado E2E (asignar/duplicado/estado/vista pública) con clubes tmp, luego borrados.
+- Evento 15 real: 5 clubes registrados vía link (ARENA BAR, Vista Bar, En lo de chiqui
+  Beach, Moes-Yoyi, Lujini) + categorías SUB 40+ MASC./FEM. creadas por el usuario (25/26).
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
