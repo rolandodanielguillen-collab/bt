@@ -1848,7 +1848,8 @@ if ($action === 'clubes_evento') {
     $res = $st->get_result();
     $clubes = [];
     while ($row = $res->fetch_assoc()) $clubes[] = $row;
-    resp(['success' => true, 'clubes' => $clubes]);
+    // sha1 del id: identificador público del link de auto-registro de clubes
+    resp(['success' => true, 'clubes' => $clubes, 'sha1_evento' => sha1((string)$idEvento)]);
 }
 
 // ACTION: crear_club — Alta de club con token único

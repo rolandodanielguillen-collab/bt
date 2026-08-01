@@ -987,9 +987,12 @@ tr:hover td{background:var(--bg-hover)}
 
       <!-- TAB 6: Clubes (solo eventos Interclubes) -->
       <div id="evTab-6" style="display:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
           <div style="font-size:13px;color:var(--text-muted);">Clubes invitados — cada club recibe su link de inscripción</div>
-          <button class="btn btn-p btn-sm" onclick="toggleFormClub()"><i class="fas fa-plus"></i> Agregar club</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-gh btn-sm" onclick="copiarLinkRegistro(this)" title="Link único del evento para que los dueños registren su club solos"><i class="fas fa-link"></i> Link de registro</button>
+            <button class="btn btn-p btn-sm" onclick="toggleFormClub()"><i class="fas fa-plus"></i> Agregar club</button>
+          </div>
         </div>
 
         <!-- Formulario alta/edición de club -->
@@ -3374,6 +3377,17 @@ async function crearCategoriaNueva() {
 
 // ═══ TAB 6: CLUBES (INTERCLUBES) ═══
 let _clubesCache = {};
+let _sha1EventoClubes = '';
+
+function copiarLinkRegistro(btn) {
+  if (!_sha1EventoClubes) { alert('Abrí la pestaña Clubes de un evento guardado primero'); return; }
+  const url = window.location.origin + '/interclubes-registro.php?ev=' + _sha1EventoClubes;
+  navigator.clipboard.writeText(url).then(() => {
+    const prev = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check" style="color:var(--success);"></i> Copiado';
+    setTimeout(() => { btn.innerHTML = prev; }, 1500);
+  });
+}
 
 function toggleFormClub() {
   const idEv = document.getElementById('evId').value;
@@ -3395,6 +3409,7 @@ async function cargarClubesEvento() {
   box.innerHTML = '<div class="loading" style="min-height:60px;border-radius:8px;"></div>';
   const r = await api({action: 'clubes_evento', evento: idEv});
   if (!r.success) { box.innerHTML = '<div class="empty">Error al cargar</div>'; return; }
+  _sha1EventoClubes = r.sha1_evento || '';
   if (!r.clubes.length) {
     box.innerHTML = '<div class="empty" style="padding:20px;">Sin clubes. Usá el botón Agregar club.</div>';
     return;

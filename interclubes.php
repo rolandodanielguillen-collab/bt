@@ -216,22 +216,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = ['err', 'Alguno de los jugadores ya está inscripto en esa categoría.'];
             } else {
                 $sexoCat = $cats[$idCat]['sexo'] ?? '';
-                $e1 = asegurarJugador($mysqli2, $ci1, $limpiar('p1_nombre'), $limpiar('p1_apellido'), preg_replace('/[^0-9]/', '', $_POST['p1_cel'] ?? ''), $sexoCat);
-                $e2 = $e1 === '' ? asegurarJugador($mysqli2, $ci2, $limpiar('p2_nombre'), $limpiar('p2_apellido'), preg_replace('/[^0-9]/', '', $_POST['p2_cel'] ?? ''), $sexoCat) : '';
-                if ($e1 !== '' || $e2 !== '') {
-                    $flash = ['err', $e1 !== '' ? $e1 : $e2];
-                } else {
-                    // Par espejo, igual que la inscripción individual
-                    $st = $mysqli2->prepare(
-                        "INSERT INTO _p_incripciones (id_evento, ci, ci_dupla, id_categoria, id_club, estado, phorario, comentario, medio)
-                         VALUES (?,?,?,?,?, 'inscripto', 'no', '', 'interclubes')");
-                    $st->bind_param('issii', $idEvento, $ci1, $ci2, $idCat, $idClub);
-                    $ok1 = $st->execute();
-                    $st->bind_param('issii', $idEvento, $ci2, $ci1, $idCat, $idClub);
-                    $ok2 = $st->execute();
-                    $flash = ($ok1 && $ok2)
-                        ? ['ok', 'Pareja inscripta en ' . $cats[$idCat]['categoria'] . '.']
-                        : ['err', 'Error al guardar la inscripción. Intentá de nuevo.'];
+                try {
+                    $e1 = asegurarJugador($mysqli2, $ci1, $limpiar('p1_nombre'), $limpiar('p1_apellido'), preg_replace('/[^0-9]/', '', $_POST['p1_cel'] ?? ''), $sexoCat);
+                    $e2 = $e1 === '' ? asegurarJugador($mysqli2, $ci2, $limpiar('p2_nombre'), $limpiar('p2_apellido'), preg_replace('/[^0-9]/', '', $_POST['p2_cel'] ?? ''), $sexoCat) : '';
+                    if ($e1 !== '' || $e2 !== '') {
+                        $flash = ['err', $e1 !== '' ? $e1 : $e2];
+                    } else {
+                        // Par espejo, igual que la inscripción individual
+                        $st = $mysqli2->prepare(
+                            "INSERT INTO _p_incripciones (id_evento, ci, ci_dupla, id_categoria, id_club, estado, phorario, comentario, medio)
+                             VALUES (?,?,?,?,?, 'inscripto', 'no', '', 'interclubes')");
+                        $st->bind_param('issii', $idEvento, $ci1, $ci2, $idCat, $idClub);
+                        $ok1 = $st->execute();
+                        $st->bind_param('issii', $idEvento, $ci2, $ci1, $idCat, $idClub);
+                        $ok2 = $st->execute();
+                        $flash = ($ok1 && $ok2)
+                            ? ['ok', 'Pareja inscripta en ' . $cats[$idCat]['categoria'] . '.']
+                            : ['err', 'Error al guardar la inscripción. Intentá de nuevo.'];
+                    }
+                } catch (mysqli_sql_exception $e) {
+                    $flash = ['err', 'Error al guardar. Revisá los datos e intentá de nuevo.'];
                 }
             }
         }
