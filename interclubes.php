@@ -22,7 +22,7 @@ if (preg_match('/^[a-f0-9]{32}$/i', $token)) {
     $st = $mysqli2->prepare(
         "SELECT c.id AS id_club, c.nombre AS club, c.responsable, c.estado AS estado_club,
                 e.id AS id_evento, e.evento, e.nombre_evento2, e.estado AS estado_evento,
-                e.fecha, e.fecha_fin_inscripcion, e.flyer, e.id_tipo_evento
+                e.fecha, e.fecha_fin_inscripcion, e.flyer, e.descripcion, e.id_tipo_evento
            FROM _p_clubes c
            JOIN _p_eventos e ON e.id = c.id_evento
           WHERE c.token = ? LIMIT 1");
@@ -268,6 +268,11 @@ $totalParejas = 0;
 foreach ($parejas as $lp) $totalParejas += count($lp);
 
 $flyerUrl = $eventoIC['flyer'] ? '/img/flyers/' . $eventoIC['flyer'] : '';
+// Cronograma: imagen cargada en "Imagen del Programa" del admin (va dentro de descripcion)
+$cronoUrl = '';
+if (preg_match('/src="([^"]+)"/', $eventoIC['descripcion'] ?? '', $mCrono)) {
+    $cronoUrl = $mCrono[1];
+}
 $fechaFmt = ($eventoIC['fecha'] && $eventoIC['fecha'] !== '0000-00-00') ? date('d/m/Y', strtotime($eventoIC['fecha'])) : '';
 $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($fcierre)) : '';
 ?>
@@ -339,6 +344,10 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
       <?= $cierreFmt ? ' &nbsp;·&nbsp; Cierre de inscripción: <strong>' . $cierreFmt . '</strong>' : '' ?>
     </div>
   </div>
+
+  <?php if ($cronoUrl): ?>
+    <img src="<?= htmlspecialchars($cronoUrl) ?>" alt="Cronograma" style="width:100%;border-radius:12px;margin-bottom:16px;display:block;">
+  <?php endif; ?>
 
   <?php if ($flash): ?>
     <div class="flash <?= $flash[0] ?>"><?= htmlspecialchars($flash[1]) ?></div>

@@ -81,6 +81,11 @@ if ($evento && (int)$evento['id_tipo_evento'] === 5) {
     $flyerTag = $flyerFile
         ? '<img src="' . htmlspecialchars($flyerUrl) . '" alt="" style="max-width:100%;border-radius:12px;margin-bottom:18px;">'
         : '';
+    // Cronograma: imagen cargada en "Imagen del Programa" (va dentro de descripcion)
+    $cronoTag = '';
+    if (preg_match('/src="([^"]+)"/', $descripcion ?? '', $m)) {
+        $cronoTag = '<img src="' . htmlspecialchars($m[1]) . '" alt="Cronograma" style="max-width:100%;border-radius:12px;margin-top:18px;">';
+    }
     $sub = $subtituloEvento ? ' · ' . htmlspecialchars($subtituloEvento) : '';
     echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
        . '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">'
@@ -99,7 +104,7 @@ if ($evento && (int)$evento['id_tipo_evento'] === 5) {
        . '<p>En este torneo la inscripción se realiza <strong>por club</strong>: el responsable de cada club inscribe a sus parejas desde el link exclusivo que le envió la organización.</p>'
        . '<p>Si sos jugador, hablá con el responsable de tu club.<br>Si sos responsable y no tenés tu link, contactá con la organización.</p>'
        . '<a class="volver" href="https://bt.com.py/">&larr; Volver a bt.com.py</a>'
-       . '</div></div></body></html>';
+       . '</div>' . $cronoTag . '</div></body></html>';
     exit;
 }
 
