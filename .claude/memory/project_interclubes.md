@@ -90,6 +90,21 @@ club puede quitar parejas hasta el cierre.
   y log PHP en /home/bt.com.py/logs/php_log.
 - Evento 15 real: club ARENA BAR (id 3) registrado por el usuario; tests limpiados.
 
+## Vista pública propia (commit 202a641, LIVE)
+- REGLA del usuario: NO tocar grafico-llaves-v2; la vista interclubes se selecciona en
+  el campo URL Fixture del evento. Mis 2 ediciones a grafico-llaves.incTMP fueron revertidas.
+- `grafico-interclubes.php` (wrapper igual a grafico-llaves-v2: $pagina + plantilla.php) +
+  `logica/grafico-interclubes.inc.php` (contenido). Link front: /<url_fixture>.php?<slug>&e=<sha1>&evento=<sha1>
+  (se arma en eventos.inc.php:404).
+- Contenido: badge Torneo Interclubes + DETALLES (fechas/clubes/parejas) + CRONOGRAMA
+  (img ancho completo de la columna, alto proporcional, click abre completa) + INSCRIPTOS
+  con toggle "Por clubes" (club→categorías→parejas) / "Por categorías" (pareja + chip club).
+  Estética idéntica al fixture: Tailwind, bg-gray-50, headers gray-800, azul blue-600.
+- Admin: opción "grafico-interclubes" en select URL Fixture; al elegir tipo 5 se
+  auto-setea si estaba en el default. ev15 ya apuntado por SQL.
+- Verificado con pareja temporal (luego borrada): contador, categoría y nombres OK.
+  Evento 15 hoy: 0 inscripciones reales (las pruebas del usuario fueron quitadas).
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
