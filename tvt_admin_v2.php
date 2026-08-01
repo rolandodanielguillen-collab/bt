@@ -781,7 +781,7 @@ tr:hover td{background:var(--bg-hover)}
         <div class="fg">
           <label class="fl">Imagen del Programa</label>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input class="fi" type="text" id="evDescImgUrl" placeholder="https://bt.com.py/sistema@/_lib/file/img/nombre-imagen.jpeg" style="flex:1;min-width:200px;">
+            <input class="fi" type="text" id="evDescImgUrl" placeholder="https://bt.com.py/img/flyers/nombre-imagen.jpeg" style="flex:1;min-width:200px;">
             <label class="btn btn-gh btn-sm" style="cursor:pointer;white-space:nowrap;">
               <i class="fas fa-upload"></i> Subir imagen
               <input type="file" id="evImgFile" accept="image/*" style="display:none;" onchange="subirImagenEvento()">
@@ -791,7 +791,7 @@ tr:hover td{background:var(--bg-hover)}
             <img id="evImgPreviewImg" src="" style="max-height:80px;border-radius:6px;border:1px solid var(--border);">
             <span id="evImgStatus" style="font-size:11px;color:var(--success);margin-left:8px;"></span>
           </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Se sube a /sistema@/_lib/file/img/ y se inserta en la descripción.</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Se sube a /img/flyers/ y se inserta en la descripción.</div>
         </div>
         <input type="hidden" id="evReglamentacion" value="">
         <input type="hidden" id="evId" value="">
@@ -2411,7 +2411,7 @@ async function loadEtiquetasEvento() {
   let html = '';
   r.por_categoria.forEach(cat => {
     const esMixta = [17,18,21,22,23].includes(parseInt(cat.id_categoria));
-    const tienePos = cat.etiquetas.some(e => ['POS1','POS2','POS3','POS4'].includes(e.value));
+    const tienePos = cat.etiquetas.some(e => ['POS1','POS2','POS3','POS4','POS5'].includes(e.value));
     const tipoBadge = tienePos ? '<span class="badge badge-s" style="font-size:10px;">GRUPO ÚNICO</span>'
       : esMixta ? '<span class="badge badge-w" style="font-size:10px;">MIXTA</span>'
       : '<span class="badge" style="font-size:10px;background:var(--accent-light);color:var(--accent);">NORMAL</span>';
@@ -2434,7 +2434,7 @@ async function loadEtiquetasEvento() {
       const colorMap = {
         'FG':'#6366f1', '8':'#3b82f6', '4':'#06b6d4', '2':'#22c55e', 
         'VC':'#f59e0b', 'CC':'#ef4444', '1':'#ef4444',
-        'POS1':'#ef4444', 'POS2':'#f59e0b', 'POS3':'#22c55e', 'POS4':'#06b6d4',
+        'POS1':'#ef4444', 'POS2':'#f59e0b', 'POS3':'#22c55e', 'POS4':'#06b6d4', 'POS5':'#a855f7',
         'R':'#8b5cf6', 'NULL':'#6b7280'
       };
       const color = colorMap[et.value] || '#6b7280';
@@ -2772,7 +2772,7 @@ async function editarEvento(id) {
   // Flyer
   if (e.flyer) {
     document.getElementById('evFlyerName').value = e.flyer;
-    var flyerUrl = '/sistema@/_lib/file/img/' + e.flyer;
+    var flyerUrl = '/img/flyers/' + e.flyer;
     document.getElementById('evFlyerPreviewImg').src = flyerUrl;
     document.getElementById('evFlyerPreviewImg').style.display = 'block';
     document.getElementById('evFlyerPreview').style.display = 'flex';
@@ -3558,9 +3558,9 @@ async function toggleAsignacion(adminId, eventoId, cb){
 
 
 // ═══ PUNTAJES ═══
-const ETIQ_NAMES={1:'Grupo',2:'8vos',3:'Cuartos',4:'Semi',5:'Final',6:'Vice Campeón',7:'Rondas',8:'Campeón',9:'16avos',10:'3er Puesto',11:'Participación',12:'Campeón Tabla',13:'Vice Tabla',14:'3ro Tabla',15:'4to Tabla'};
-const ETIQ_ORDER=[1,9,2,3,4,6,8,11,12,13,14,15];
-const ETIQ_SHORT={1:'Grupo',9:'16avos',2:'8vos',3:'Cuartos',4:'Semi',6:'Vice',8:'Campeón',11:'Partic.',12:'Camp. Tabla',13:'Vice Tabla',14:'3ro Tabla',15:'4to Tabla'};
+const ETIQ_NAMES={1:'Grupo',2:'8vos',3:'Cuartos',4:'Semi',5:'Final',6:'Vice Campeón',7:'Rondas',8:'Campeón',9:'16avos',10:'3er Puesto',11:'Participación',12:'Campeón Tabla',13:'Vice Tabla',14:'3ro Tabla',15:'4to Tabla',16:'5to Tabla'};
+const ETIQ_ORDER=[1,9,2,3,4,6,8,11,12,13,14,15,16];
+const ETIQ_SHORT={1:'Grupo',9:'16avos',2:'8vos',3:'Cuartos',4:'Semi',6:'Vice',8:'Campeón',11:'Partic.',12:'Camp. Tabla',13:'Vice Tabla',14:'3ro Tabla',15:'4to Tabla',16:'5to Tabla'};
 let pjEtiquetas=[];
 let pjCategorias=[];
 

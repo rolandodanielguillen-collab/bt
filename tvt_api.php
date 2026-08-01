@@ -548,7 +548,7 @@ if ($action === 'ranking') {
                     JOIN _p_etiquetas e ON r.id_etiqueta = e.id
                     WHERE r.id_evento = $evId 
                       AND r.id_categoria IN ($acategoria, $padreCat)
-                      AND e.value IN ('POS1','POS2','POS3','POS4')");
+                      AND e.value IN ('POS1','POS2','POS3','POS4','POS5')");
                 $esGU = ($resGU && $resGU->fetch_assoc()['total'] > 0);
 
                 // Puntos del padre en este evento
@@ -1559,6 +1559,260 @@ if ($action === 'copiar_puntajes') {
     }
 
     resp(['success' => true, 'count' => $count]);
+}
+
+
+// generar_etiquetas: Auto-generar etiquetas de puntaje por evento
+if ($action === 'generar_etiquetas') {
+    $idEvento = abs((int)strGet('evento'));
+    if (!$idEvento) respErr('Falta evento');
+
+    $resEv = $mysqli2->query("SELECT id, evento, id_circuito FROM _p_eventos WHERE id=$idEvento LIMIT 1");
+    if (!$resEv || $resEv->num_rows === 0) respErr('Evento no encontrado');
+    $evento = $resEv->fetch_assoc();
+    $idCircuito = (int)$evento['id_circuito'];
+
+    $cats = [];
+    $rc = $mysqli2->query("SELECT rec.id_categoria, c.categoria
+        FROM _relacion_evento_categoria rec
+        JOIN _p_categorias c ON c.id=rec.id_categoria
+        WHERE rec.id_evento=$idEvento ORDER BY c.categoria");
+    while ($r = $rc->fetch_assoc()) {
+        $cats[] = ['id' => (int)$r['id_categoria'], 'nombre' => $r['categoria']];
+    }
+
+    // Buscar evento anterior del mismo circuito para copiar puntos
+    $puntosRef = [];
+    if ($idCircuito > 0) {
+        $resRef = $mysqli2->query("SELECT id FROM _p_eventos
+            WHERE id_circuito=$idCircuito AND id < $idEvento ORDER BY id DESC LIMIT 1");
+        if ($resRef && $resRef->num_rows > 0) {
+            $evRef = (int)$resRef->fetch_assoc()['id'];
+            $rr = $mysqli2->query("SELECT id_categoria, id_etiqueta, puntos
+                FROM _relacion_etiquetas_eventos WHERE id_evento=$evRef");
+            while ($r = $rr->fetch_assoc()) {
+                $puntosRef[(int)$r['id_categoria']][(int)$r['id_etiqueta']] = (int)$r['puntos'];
+            }
+        }
+    }
+
+    $defaultBracket = [1=>30, 2=>30, 3=>40, 4=>60, 6=>80, 8=>100];
+    $defaultGU = [12=>100, 13=>80, 14=>60, 15=>40, 16=>30, 11=>30];
+
+    $detalle = [];
+    $totalInsertadas = 0;
+
+    foreach ($cats as $cat) {
+        $idCat = $cat['id'];
+
+        $resEx = $mysqli2->query("SELECT COUNT(*) as total FROM _relacion_etiquetas_eventos
+            WHERE id_evento=$idEvento AND id_categoria=$idCat");
+        $yaExiste = (int)$resEx->fetch_assoc()['total'];
+        if ($yaExiste > 0) {
+            $detalle[] = ['categoria' => $cat['nombre'], 'estado' => 'existente',
+                'motivo' => "Ya tiene $yaExiste etiquetas configuradas"];
+            continue;
+        }
+
+        $resFases = $mysqli2->query("SELECT
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=1 THEN t.grupo END) as fase_grupos,
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=9 THEN t.grupo END) as tiene_16avos,
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=2 THEN t.grupo END) as tiene_8vos,
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=3 THEN t.grupo END) as tiene_cuartos,
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=4 THEN t.grupo END) as tiene_semis,
+            COUNT(DISTINCT CASE WHEN g.id_etiqueta=5 THEN t.grupo END) as tiene_final
+            FROM _todosvstodos t
+            JOIN _p_grupos g ON g.id=t.grupo
+            WHERE t.evento=$idEvento AND t.categoria=$idCat");
+        $fases = $resFases->fetch_assoc();
+
+        $gruposFase = (int)$fases['fase_grupos'];
+        $tieneBracket = (int)$fases['tiene_cuartos'] > 0 || (int)$fases['tiene_semis'] > 0 || (int)$fases['tiene_final'] > 0;
+        $esGrupoUnico = ($gruposFase === 1 && !$tieneBracket);
+
+        $resParejas = $mysqli2->query("SELECT COUNT(*) as total FROM _p_incripciones
+            WHERE id_evento=$idEvento AND id_categoria=$idCat");
+        $parejas = (int)($resParejas->fetch_assoc()['total'] ?? 0);
+
+        $catNombre = $cat['nombre'];
+        $esMixta = (stripos($catNombre, 'mixto') !== false || stripos($catNombre, 'mixta') !== false);
+
+        if ($gruposFase === 0 && !$tieneBracket) {
+            $detalle[] = ['categoria' => $cat['nombre'], 'estado' => 'sin_sorteo',
+                'motivo' => 'Sin sorteo generado'];
+            continue;
+        }
+
+        $etiquetasInsertar = [];
+        $fasesDetectadas = [];
+
+        if ($esGrupoUnico) {
+            $etiquetasInsertar = [12, 13, 14, 15, 16, 11];
+            $fasesDetectadas = ['grupo_unico' => true];
+            $ref = $puntosRef[$idCat] ?? [];
+            $ptsBase = (isset($ref[12]) || isset($ref[13])) ? $ref : $defaultGU;
+        } else {
+            $etiquetasInsertar[] = 1;
+            $fasesDetectadas['FG'] = true;
+
+            if ((int)$fases['tiene_16avos'] > 0) { $etiquetasInsertar[] = 9; $fasesDetectadas['16vos'] = true; }
+            if ((int)$fases['tiene_8vos'] > 0)   { $etiquetasInsertar[] = 2; $fasesDetectadas['8vos'] = true; }
+            if ((int)$fases['tiene_cuartos'] > 0) { $etiquetasInsertar[] = 3; $fasesDetectadas['cuartos'] = true; }
+            if ((int)$fases['tiene_semis'] > 0)   { $etiquetasInsertar[] = 4; $fasesDetectadas['semis'] = true; }
+            if ((int)$fases['tiene_final'] > 0)   { $etiquetasInsertar[] = 6; $etiquetasInsertar[] = 8; $fasesDetectadas['final'] = true; }
+
+            $ref = $puntosRef[$idCat] ?? [];
+            $ptsBase = (isset($ref[1]) || isset($ref[8])) ? $ref : $defaultBracket;
+        }
+
+        $count = 0;
+        foreach ($etiquetasInsertar as $idEtiq) {
+            $pts = $ptsBase[$idEtiq] ?? 0;
+            $mysqli2->query("INSERT INTO _relacion_etiquetas_eventos
+                (id_etiqueta, id_evento, puntos, id_categoria)
+                VALUES ($idEtiq, $idEvento, $pts, $idCat)");
+            $count++;
+        }
+        $totalInsertadas += $count;
+
+        $detalle[] = [
+            'categoria' => $cat['nombre'],
+            'estado' => 'generada',
+            'parejas' => $parejas,
+            'es_mixta' => $esMixta,
+            'es_grupo_unico' => $esGrupoUnico,
+            'fases' => $fasesDetectadas,
+            'etiquetas_insertadas' => $count
+        ];
+    }
+
+    resp([
+        'success' => true,
+        'mensaje' => "Etiquetas generadas: $totalInsertadas en total",
+        'detalle' => $detalle
+    ]);
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// etiquetas_evento: Listar etiquetas configuradas por evento
+// ══════════════════════════════════════════════════════════════
+if ($action === 'etiquetas_evento') {
+    $idEvento = abs((int)strGet('evento'));
+    if (!$idEvento) respErr('Falta evento');
+
+    $porCat = [];
+    $total = 0;
+
+    $rc = $mysqli2->query("SELECT rec.id_categoria, c.categoria
+        FROM _relacion_evento_categoria rec
+        JOIN _p_categorias c ON c.id=rec.id_categoria
+        WHERE rec.id_evento=$idEvento ORDER BY c.categoria");
+    while ($r = $rc->fetch_assoc()) {
+        $catId = (int)$r['id_categoria'];
+        $porCat[$catId] = ['id_categoria' => $catId, 'categoria' => $r['categoria'], 'etiquetas' => []];
+    }
+
+    $re = $mysqli2->query("SELECT rel.id, rel.id_etiqueta, rel.id_categoria, rel.puntos, e.etiqueta, e.value
+        FROM _relacion_etiquetas_eventos rel
+        JOIN _p_etiquetas e ON e.id=rel.id_etiqueta
+        WHERE rel.id_evento=$idEvento
+        ORDER BY rel.id_categoria, rel.id_etiqueta");
+    while ($r = $re->fetch_assoc()) {
+        $catId = (int)$r['id_categoria'];
+        if (!isset($porCat[$catId])) {
+            $porCat[$catId] = ['id_categoria' => $catId, 'categoria' => "Cat. $catId", 'etiquetas' => []];
+        }
+        $porCat[$catId]['etiquetas'][] = [
+            'id' => (int)$r['id'],
+            'id_etiqueta' => (int)$r['id_etiqueta'],
+            'etiqueta' => $r['etiqueta'],
+            'value' => $r['value'],
+            'puntos' => (int)$r['puntos']
+        ];
+        $total++;
+    }
+
+    // Filtrar categorías sin etiquetas para mantener limpio
+    $resultado = [];
+    foreach ($porCat as $cat) {
+        if (count($cat['etiquetas']) > 0) $resultado[] = $cat;
+    }
+
+    resp(['success' => true, 'total' => $total, 'por_categoria' => $resultado]);
+}
+
+// ══════════════════════════════════════════════════════════════
+// guardar_etiqueta: Crear o actualizar una etiqueta de puntaje
+// ══════════════════════════════════════════════════════════════
+if ($action === 'guardar_etiqueta') {
+    $id = abs((int)strGet('id'));
+    $idEvento = abs((int)strGet('evento'));
+    $idCategoria = abs((int)strGet('categoria'));
+    $idEtiqueta = abs((int)strGet('etiqueta'));
+    $puntos = abs((int)strGet('puntos'));
+
+    if ($id > 0) {
+        // Update existing
+        $mysqli2->query("UPDATE _relacion_etiquetas_eventos SET puntos=$puntos WHERE id=$id");
+        resp(['success' => true]);
+    }
+
+    if (!$idEvento || !$idCategoria || !$idEtiqueta) respErr('Faltan parámetros');
+
+    // Check duplicate
+    $chk = $mysqli2->query("SELECT id FROM _relacion_etiquetas_eventos
+        WHERE id_evento=$idEvento AND id_categoria=$idCategoria AND id_etiqueta=$idEtiqueta LIMIT 1");
+    if ($chk && $chk->num_rows > 0) {
+        $row = $chk->fetch_assoc();
+        $mysqli2->query("UPDATE _relacion_etiquetas_eventos SET puntos=$puntos WHERE id={$row['id']}");
+        resp(['success' => true]);
+    }
+
+    $mysqli2->query("INSERT INTO _relacion_etiquetas_eventos
+        (id_etiqueta, id_evento, puntos, id_categoria)
+        VALUES ($idEtiqueta, $idEvento, $puntos, $idCategoria)");
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════
+// eliminar_etiqueta: Eliminar una etiqueta individual
+// ══════════════════════════════════════════════════════════════
+if ($action === 'eliminar_etiqueta') {
+    $id = abs((int)strGet('id'));
+    if (!$id) respErr('Falta id');
+    $mysqli2->query("DELETE FROM _relacion_etiquetas_eventos WHERE id=$id");
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════
+// limpiar_etiquetas: Eliminar etiquetas de un evento (o cat)
+// ══════════════════════════════════════════════════════════════
+if ($action === 'limpiar_etiquetas') {
+    $idEvento = abs((int)strGet('evento'));
+    $idCategoria = abs((int)strGet('categoria'));
+    if (!$idEvento) respErr('Falta evento');
+
+    if ($idCategoria > 0) {
+        $mysqli2->query("DELETE FROM _relacion_etiquetas_eventos
+            WHERE id_evento=$idEvento AND id_categoria=$idCategoria");
+    } else {
+        $mysqli2->query("DELETE FROM _relacion_etiquetas_eventos
+            WHERE id_evento=$idEvento");
+    }
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════
+// todas_etiquetas: Listar todas las etiquetas disponibles
+// ══════════════════════════════════════════════════════════════
+if ($action === 'todas_etiquetas') {
+    $etiqs = [];
+    $re = $mysqli2->query("SELECT id, etiqueta, value FROM _p_etiquetas ORDER BY id");
+    while ($r = $re->fetch_assoc()) {
+        $etiqs[] = ['id' => (int)$r['id'], 'etiqueta' => $r['etiqueta'], 'value' => $r['value']];
+    }
+    resp(['success' => true, 'etiquetas' => $etiqs]);
 }
 
 // ── Si ninguna acción coincidió ──
