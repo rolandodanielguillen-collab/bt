@@ -110,7 +110,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'buscar_ci') {
 // Categorías habilitadas del evento
 function categoriasEvento($mysqli2, $idEvento) {
     $st = $mysqli2->prepare(
-        "SELECT rec.id_categoria, cat.categoria, rec.sexo
+        "SELECT rec.id_categoria, cat.categoria, rec.sexo, rec.max_parejas
            FROM _relacion_evento_categoria rec
            JOIN _p_categorias cat ON cat.id = rec.id_categoria
           WHERE rec.id_evento = ? AND rec.estado = 'activo'
@@ -210,8 +210,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute();
             $yaInscripto = $st->get_result()->num_rows > 0;
 
-            if ($nParejas >= MAX_PAREJAS_POR_CAT) {
-                $flash = ['err', 'Tu club ya tiene ' . MAX_PAREJAS_POR_CAT . ' parejas en ' . $cats[$idCat]['categoria'] . '.'];
+            $maxCat = max(1, (int)($cats[$idCat]['max_parejas'] ?? MAX_PAREJAS_POR_CAT));
+            if ($nParejas >= $maxCat) {
+                $flash = ['err', 'Tu club ya tiene ' . $maxCat . ' pareja(s) en ' . $cats[$idCat]['categoria'] . '.'];
             } elseif ($yaInscripto) {
                 $flash = ['err', 'Alguno de los jugadores ya está inscripto en esa categoría.'];
             } else {
@@ -366,28 +367,31 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
   <?php endif; ?>
 
   <div class="resumen">
-    Podés inscribir hasta <strong><?= MAX_PAREJAS_POR_CAT ?> parejas por categoría</strong>.
+    Inscribí a las parejas de tu club en cada categoría (el orden de carga define
+    <strong>Pareja 1, Pareja 2…</strong> para los enfrentamientos).
     Parejas cargadas: <strong><?= $totalParejas ?></strong>
   </div>
 
   <?php foreach ($cats as $idCat => $cat):
       $lp = $parejas[$idCat] ?? [];
       $n  = count($lp);
-      $puedeAgregar = $abierta && $n < MAX_PAREJAS_POR_CAT;
+      $maxCat = max(1, (int)($cat['max_parejas'] ?? MAX_PAREJAS_POR_CAT));
+      $puedeAgregar = $abierta && $n < $maxCat;
   ?>
   <div class="cat">
     <div class="cat-h">
       <span class="nombre"><?= htmlspecialchars($cat['categoria']) ?></span>
-      <span class="cupo <?= $n >= MAX_PAREJAS_POR_CAT ? 'full' : '' ?>"><?= $n ?>/<?= MAX_PAREJAS_POR_CAT ?> parejas</span>
+      <span class="cupo <?= $n >= $maxCat ? 'full' : '' ?>"><?= $n ?>/<?= $maxCat ?> parejas</span>
     </div>
 
     <?php if (!$n): ?>
       <div class="vacio">Sin parejas cargadas</div>
     <?php endif; ?>
 
-    <?php foreach ($lp as $p): ?>
+    <?php foreach ($lp as $nroP => $p): ?>
     <div class="pareja">
       <div class="nombres">
+        <span class="ci-chico" style="font-weight:700;">Pareja <?= $nroP + 1 ?></span><br>
         <?= htmlspecialchars(trim($p['j1']) ?: 'CI ' . maskCi($p['ci'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci'])) ?>)</span><br>
         <?= htmlspecialchars(trim($p['j2']) ?: 'CI ' . maskCi($p['ci_dupla'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci_dupla'])) ?>)</span>
       </div>

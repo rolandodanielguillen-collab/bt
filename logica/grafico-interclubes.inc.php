@@ -87,9 +87,12 @@ while ($p = $res->fetch_assoc()) {
 }
 
 // ── Sorteo público (grupos de clubes por categoría) ──────────────────────────
-$sorteoIC = [];   // [nombre_cat => [grupo => [nombres de clubes en orden]]]
+require_once __DIR__ . '/../interclubes.functions.php';
+
+$sorteoIC = [];   // [nombre_cat => ['idcat' => N, 'grupos' => [g => [['id','nombre'], …]]]]
 $st = $mysqli2->prepare(
-    "SELECT COALESCE(cat.categoria, 'SIN CATEGORÍA') AS nomcat, s.grupo, cl.nombre AS club
+    "SELECT s.id_categoria, COALESCE(cat.categoria, 'SIN CATEGORÍA') AS nomcat,
+            s.grupo, s.id_club, cl.nombre AS club
        FROM _ic_sorteo s
        JOIN _p_clubes cl ON cl.id = s.id_club
        LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
@@ -99,9 +102,38 @@ $st->bind_param('i', $idEventos);
 $st->execute();
 $res = $st->get_result();
 while ($r = $res->fetch_assoc()) {
-    $sorteoIC[$r['nomcat']][(int)$r['grupo']][] = $r['club'];
+    $sorteoIC[$r['nomcat']]['idcat'] = (int)$r['id_categoria'];
+    $sorteoIC[$r['nomcat']]['grupos'][(int)$r['grupo']][] = ['id' => (int)$r['id_club'], 'nombre' => $r['club']];
 }
 $haySorteo = !empty($sorteoIC);
+
+// Partidos cargados + nombres de jugadores (para resultados y posiciones)
+$partidosIC = [];  // [idcat][grupo][] = fila _ic_partidos
+$icNombres  = [];  // ci => nombre
+if ($haySorteo) {
+    $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id_evento = ?");
+    $st->bind_param('i', $idEventos);
+    $st->execute();
+    $res = $st->get_result();
+    $cisIC = [];
+    while ($r = $res->fetch_assoc()) {
+        $partidosIC[(int)$r['id_categoria']][(int)$r['grupo']][] = $r;
+        foreach (['ci1_a','ci1_b','ci2_a','ci2_b'] as $k) $cisIC[$r[$k]] = 1;
+    }
+    if ($cisIC) {
+        $in = "'" . implode("','", array_map(fn($c) => $mysqli2->real_escape_string($c), array_keys($cisIC))) . "'";
+        $r2 = $mysqli2->query("SELECT ci, TRIM(CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,''))) n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
+        while ($x = $r2->fetch_assoc()) $icNombres[trim($x['ci'])] = $x['n'];
+    }
+}
+// Duplas por (categoría, club) con cache — define los slots de cada serie
+$icDuplasCache = [];
+function ic_n_duplas($db, $idEv, $idCat, $idClub) {
+    global $icDuplasCache;
+    $k = $idCat . '-' . $idClub;
+    if (!isset($icDuplasCache[$k])) $icDuplasCache[$k] = count(ic_duplas($db, $idEv, $idCat, $idClub));
+    return $icDuplasCache[$k];
+}
 
 function ic_nombre($n) {
     if (!mb_check_encoding((string)$n, 'UTF-8')) $n = mb_convert_encoding($n, 'UTF-8', 'ISO-8859-1');
@@ -211,13 +243,30 @@ function ic_nombre($n) {
                     </div>
 
                     <?php if ($haySorteo): ?>
-                    <!-- ══ VISTA SORTEO (grupos de clubes por categoría) ══ -->
+                    <!-- ══ VISTA SORTEO (grupos, posiciones y resultados por categoría) ══ -->
                     <div id="vistaSorteo" class="space-y-6">
-                        <?php foreach ($sorteoIC as $nomCat => $grupos): ?>
+                        <?php foreach ($sorteoIC as $nomCat => $catData):
+                            $idCatX = $catData['idcat'];
+                            $gruposCat = $catData['grupos'];
+                        ?>
                         <div>
                             <h3 class="text-center text-base font-extrabold text-gray-900 uppercase tracking-wide mb-3"><?php echo htmlspecialchars($nomCat); ?></h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <?php foreach ([1, 2] as $g): $clubesG = $grupos[$g] ?? []; ?>
+                                <?php foreach ([1, 2] as $g):
+                                    $clubesG = $gruposCat[$g] ?? [];
+                                    $mapaG = [];
+                                    foreach ($clubesG as $c) $mapaG[$c['id']] = $c['nombre'];
+                                    $partG = $partidosIC[$idCatX][$g] ?? [];
+                                    // slots por cruce (min duplas entre ambos clubes)
+                                    $slotsPorCruce = [];
+                                    $nG = count($clubesG);
+                                    for ($i = 0; $i < $nG; $i++) for ($j = $i + 1; $j < $nG; $j++) {
+                                        $a = $clubesG[$i]['id']; $b = $clubesG[$j]['id'];
+                                        $slotsPorCruce[min($a,$b) . '-' . max($a,$b)] =
+                                            max(1, min(ic_n_duplas($mysqli2, $idEventos, $idCatX, $a), ic_n_duplas($mysqli2, $idEventos, $idCatX, $b)));
+                                    }
+                                    $posG = $partG ? ic_posiciones($mapaG, $partG, $slotsPorCruce) : [];
+                                ?>
                                 <div class="border border-gray-700 rounded-lg overflow-hidden">
                                     <div class="bg-gray-800 px-3 py-2 flex items-center justify-between">
                                         <span class="text-sm font-bold text-white">Grupo <?php echo $g; ?></span>
@@ -227,20 +276,73 @@ function ic_nombre($n) {
                                         <?php if (!$clubesG): ?>
                                             <div class="px-3 py-2.5 text-xs italic" style="color:rgba(255,255,255,.35)">Aún sin sortear</div>
                                         <?php endif; ?>
-                                        <?php foreach ($clubesG as $i => $nomClub): ?>
+
+                                        <?php if ($posG): ?>
+                                        <!-- Posiciones -->
+                                        <div class="px-3 py-2 border-b border-gray-800">
+                                            <div class="text-[.6rem] font-extrabold uppercase tracking-widest text-blue-400 mb-1.5">Posiciones</div>
+                                            <table class="w-full text-[.68rem] text-slate-200">
+                                                <tr class="text-[.55rem] uppercase" style="color:rgba(255,255,255,.4)">
+                                                    <th class="text-left font-bold pb-1">Club</th>
+                                                    <th class="font-bold pb-1 text-center" title="Series ganadas-perdidas">Series</th>
+                                                    <th class="font-bold pb-1 text-center" title="Partidos ganados-perdidos">Partidos</th>
+                                                    <th class="font-bold pb-1 text-center">Pts</th>
+                                                </tr>
+                                                <?php foreach ($posG as $ip => $p): ?>
+                                                <tr style="<?php echo $ip === 0 && $p['pts'] > 0 ? 'color:#4ade80;font-weight:800' : ''; ?>">
+                                                    <td class="py-0.5 font-bold uppercase truncate" style="max-width:120px;"><?php echo $ip + 1; ?>. <?php echo ic_nombre($p['club']); ?></td>
+                                                    <td class="text-center"><?php echo $p['sg']; ?>-<?php echo $p['sp']; ?></td>
+                                                    <td class="text-center"><?php echo $p['pg']; ?>-<?php echo $p['pp']; ?></td>
+                                                    <td class="text-center font-extrabold"><?php echo $p['pts']; ?></td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </table>
+                                        </div>
+                                        <?php else: foreach ($clubesG as $i => $c): ?>
                                         <div class="px-3 py-2.5 flex items-center gap-2 <?php echo $i > 0 ? 'border-t border-gray-800' : ''; ?>">
                                             <span class="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-300 text-[.6rem] font-extrabold flex items-center justify-center flex-shrink-0"><?php echo $i + 1; ?></span>
-                                            <span class="text-[.8rem] font-bold text-slate-100 uppercase truncate"><?php echo ic_nombre($nomClub); ?></span>
+                                            <span class="text-[.8rem] font-bold text-slate-100 uppercase truncate"><?php echo ic_nombre($c['nombre']); ?></span>
                                         </div>
-                                        <?php endforeach; ?>
-                                        <?php if (count($clubesG) >= 2): ?>
+                                        <?php endforeach; endif; ?>
+
+                                        <?php if ($nG >= 2): ?>
                                         <div class="border-t border-gray-700 px-3 py-2">
                                             <div class="text-[.6rem] font-extrabold uppercase tracking-widest text-blue-400 mb-1">Enfrentamientos</div>
-                                            <?php for ($i = 0; $i < count($clubesG); $i++): for ($j = $i + 1; $j < count($clubesG); $j++): ?>
-                                            <div class="text-[.72rem] font-semibold text-slate-200 py-0.5">
-                                                <?php echo ic_nombre($clubesG[$i]); ?>
-                                                <span class="text-[.6rem] font-extrabold px-1.5" style="color:#93c5fd">VS</span>
-                                                <?php echo ic_nombre($clubesG[$j]); ?>
+                                            <?php for ($i = 0; $i < $nG; $i++): for ($j = $i + 1; $j < $nG; $j++):
+                                                $a = $clubesG[$i]['id']; $b = $clubesG[$j]['id'];
+                                                $k = min($a,$b) . '-' . max($a,$b);
+                                                $msSerie = array_values(array_filter($partG, fn($m) =>
+                                                    (min((int)$m['club1'], (int)$m['club2']) . '-' . max((int)$m['club1'], (int)$m['club2'])) === $k));
+                                                usort($msSerie, fn($x, $y) => [(int)$x['es_desempate'], (int)$x['id']] <=> [(int)$y['es_desempate'], (int)$y['id']]);
+                                                [$wA, $wB, $definida, $ganadorS, $necesitaDes] = ic_estado_serie($msSerie, $a, $b, $slotsPorCruce[$k]);
+                                            ?>
+                                            <div class="py-1.5 <?php echo ($i + $j) > 1 ? 'border-t border-gray-800' : ''; ?>">
+                                                <div class="text-[.72rem] font-semibold text-slate-200 flex items-center justify-between gap-1">
+                                                    <span class="truncate"><?php echo ic_nombre($clubesG[$i]['nombre']); ?>
+                                                    <span class="text-[.6rem] font-extrabold px-1" style="color:#93c5fd">VS</span>
+                                                    <?php echo ic_nombre($clubesG[$j]['nombre']); ?></span>
+                                                    <?php if ($definida): ?>
+                                                        <span class="flex-shrink-0 text-[.6rem] font-extrabold px-1.5 py-0.5 rounded" style="background:rgba(34,197,94,.15);color:#4ade80"><?php echo ic_nombre($ganadorS === $a ? $clubesG[$i]['nombre'] : $clubesG[$j]['nombre']); ?> <?php echo max($wA,$wB); ?>-<?php echo min($wA,$wB); ?></span>
+                                                    <?php elseif ($msSerie): ?>
+                                                        <span class="flex-shrink-0 text-[.6rem] font-extrabold px-1.5 py-0.5 rounded" style="background:rgba(234,179,8,.15);color:#fbbf24"><?php echo $wA; ?>-<?php echo $wB; ?><?php echo $necesitaDes ? ' · desempate' : ''; ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <?php foreach ($msSerie as $m):
+                                                    [$s1, $s2] = ic_sets_partido($m);
+                                                    $score = [];
+                                                    foreach ([['s1c1','s1c2'],['s2c1','s2c2'],['s3c1','s3c2']] as [$ka,$kb]) {
+                                                        if ((int)$m[$ka] === 0 && (int)$m[$kb] === 0) continue;
+                                                        $score[] = $m[$ka] . '-' . $m[$kb];
+                                                    }
+                                                    $gan = ic_ganador_partido($m);
+                                                ?>
+                                                <div class="text-[.62rem] pl-1 py-0.5" style="color:rgba(255,255,255,.55)">
+                                                    <?php if ((int)$m['es_desempate']): ?><span style="color:#c4b5fd;font-weight:800">★</span><?php endif; ?>
+                                                    <span style="<?php echo $gan === 1 ? 'color:#e2e8f0;font-weight:700' : ''; ?>"><?php echo htmlspecialchars(($icNombres[$m['ci1_a']] ?? $m['ci1_a']) . ' / ' . ($icNombres[$m['ci1_b']] ?? $m['ci1_b'])); ?></span>
+                                                    <span class="font-extrabold" style="color:#93c5fd"> <?php echo implode(' ', $score); ?> </span>
+                                                    <span style="<?php echo $gan === 2 ? 'color:#e2e8f0;font-weight:700' : ''; ?>"><?php echo htmlspecialchars(($icNombres[$m['ci2_a']] ?? $m['ci2_a']) . ' / ' . ($icNombres[$m['ci2_b']] ?? $m['ci2_b'])); ?></span>
+                                                </div>
+                                                <?php endforeach; ?>
                                             </div>
                                             <?php endfor; endfor; ?>
                                         </div>

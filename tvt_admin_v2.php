@@ -992,6 +992,7 @@ tr:hover td{background:var(--bg-hover)}
           <div style="font-size:13px;color:var(--text-muted);">Clubes invitados — cada club recibe su link de inscripción</div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-gh btn-sm" onclick="abrirSorteoIC()" title="Pantalla de carga en vivo del sorteo público"><i class="fas fa-shuffle"></i> Sorteo</button>
+            <button class="btn btn-gh btn-sm" onclick="abrirResultadosIC()" title="Carga de resultados y tabla de posiciones"><i class="fas fa-table-list"></i> Resultados</button>
             <button class="btn btn-gh btn-sm" onclick="copiarLinkRegistro(this)" title="Link único del evento para que los dueños registren su club solos"><i class="fas fa-link"></i> Link de registro</button>
             <button class="btn btn-p btn-sm" onclick="toggleFormClub()"><i class="fas fa-plus"></i> Agregar club</button>
           </div>
@@ -3273,7 +3274,7 @@ async function cargarCatsEvento() {
             </select>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr;gap:8px;margin-bottom:10px;">
           <div>
             <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">COSTO (Gs.)</label>
             <input class="fi" type="number" id="rec-costo-${c.id_relacion}" value="${c.costo||0}" placeholder="0">
@@ -3281,6 +3282,10 @@ async function cargarCatsEvento() {
           <div>
             <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">ORDEN</label>
             <input class="fi" type="number" id="rec-orden-${c.id_relacion}" value="${c.orden_visualizacion||1}" min="1">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;" title="Parejas por club (interclubes)">MÁX. PAREJAS</label>
+            <input class="fi" type="number" id="rec-maxpar-${c.id_relacion}" value="${c.max_parejas||2}" min="1" max="9">
           </div>
           <div>
             <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">LINK GRUPOS</label>
@@ -3311,6 +3316,7 @@ async function guardarFilaCat(idRel) {
     sexo:                document.getElementById('rec-sexo-'    + idRel).value,
     costo:               document.getElementById('rec-costo-'   + idRel).value,
     orden_visualizacion: document.getElementById('rec-orden-'   + idRel).value,
+    max_parejas:         document.getElementById('rec-maxpar-'  + idRel).value,
     link_grupos:         document.getElementById('rec-link-'    + idRel).value,
   };
   for (const [campo, valor] of Object.entries(campos)) {
@@ -3388,6 +3394,12 @@ function abrirSorteoIC() {
   const idEv = document.getElementById('evId').value;
   if (!idEv) { alert('Guardá el evento primero'); return; }
   window.open('/interclubes_sorteo.php?evento=' + idEv, '_blank');
+}
+
+function abrirResultadosIC() {
+  const idEv = document.getElementById('evId').value;
+  if (!idEv) { alert('Guardá el evento primero'); return; }
+  window.open('/interclubes_resultados.php?evento=' + idEv, '_blank');
 }
 
 function copiarLinkRegistro(btn) {

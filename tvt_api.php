@@ -1089,7 +1089,7 @@ if ($action === 'cats_evento') {
     if (!$idEvento) respErr('Falta evento');
     $r = $mysqli2->query("SELECT rec.id as id_relacion, rec.id_categoria, rec.estado,
                    rec.cupo, rec.visualizar_en_llaves, rec.sexo,
-                   rec.costo, rec.orden_visualizacion, rec.link_grupos,
+                   rec.costo, rec.orden_visualizacion, rec.link_grupos, rec.max_parejas,
                    c.categoria
             FROM _relacion_evento_categoria rec
             LEFT JOIN _p_categorias c ON c.id = rec.id_categoria
@@ -1159,7 +1159,7 @@ if ($action === 'actualizar_cat_evento') {
     $valor = $mysqli2->real_escape_string(strGet('valor'));
     if (!$idRel || !$campo) respErr('Faltan parámetros');
     // Whitelist de campos permitidos
-    $camposPermitidos = ['estado','cupo','visualizar_en_llaves','sexo','costo','orden_visualizacion','link_grupos'];
+    $camposPermitidos = ['estado','cupo','visualizar_en_llaves','sexo','costo','orden_visualizacion','link_grupos','max_parejas'];
     if (!in_array($campo, $camposPermitidos)) respErr("Campo '$campo' no permitido");
     $mysqli2->query("UPDATE _relacion_evento_categoria SET `$campo`='$valor' WHERE id=$idRel LIMIT 1");
     resp(['success' => true]);
