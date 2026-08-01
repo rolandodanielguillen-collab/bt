@@ -1,41 +1,62 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
 ## Qué es
-Competencia entre clubes: dueños de clubes reciben una URL con formulario para
-inscribir hasta 2 parejas por categoría. 12 categorías actuales + 1 nueva (senior).
-Luego: sorteo público (carga manual presencial) → genera enfrentamientos.
+Competencia entre clubes: dueños de clubes reciben una URL con token para
+inscribir hasta 2 parejas por categoría. Categorías se crean desde el admin
+(Senior la crea el usuario después). Inscripción SOLO vía URL del club.
+Luego: sorteo público (carga manual presencial) → enfrentamientos club vs club.
 
-## Estado: ANÁLISIS en progreso
-- Schema DB relevado: `_p_eventos` (id_tipo_evento 1-4, interclubes sería 5),
-  `_p_categorias` (23 cats, evento 13 usa 12 activas: C/D/E masc+fem, MIXTO C/D/E/OPEN, OPEN m/f),
-  `_p_incripciones`, `_tabla_parejas`, `_equipos`, `_relacion_evento_categoria`.
-- NO existe concepto "club" en DB (46 tablas revisadas; `_p_complejos` = predios).
-- Admins: `_usuario_admin` (superadmin fabian/ROLANDO, clientes EXAS/ASO/PRUE) + `_admin_evento`.
-- Archivos clave bajados a scratchpad: inscripcion.php, inscripcion-v2.inc.php,
-  post_inscripcion.php, 3_tvt_generar_sorteo.php, generar_sorteo_tvt.php, tvt_plantillas.php.
-- 2 agentes Explore analizando: flujo inscripción y flujo sorteo/admin.
+## Decisiones aprobadas (usuario 2026-08-01)
+1. Sistema permite CREAR categorías desde admin (no hardcodear Senior).
+2. Interclubes se inscribe únicamente por la URL del dueño del club; CI autocompleta datos como hoy.
 
-## Hallazgos sorteo/admin (agente, 2026-08-01)
-- Eventos se crean por UI: tvt_admin_v2.php modal 5 pestañas → tvt_api.php `crear_evento` (INSERT 31 cols). UI solo expone tipos 1/2/3.
-- Sorteo NO es aleatorio: determinístico por ranking (serpiente + cabezas de serie). No hay carga manual de posiciones (solo swap post-sorteo `intercambiar_parejas`).
-- Flujo: _p_incripciones → generar_equipos.php → _equipos (solo contadores); _tabla_parejas es la fuente real del sorteo (generador = grafico-llaves-v2.php, no analizado).
-- 3_tvt_generar_sorteo.php = versión activa; genera grupos + eliminatoria desde _tvt_plantillas (42 plantillas, selección automática por N parejas, JSON cruces_eliminatoria).
-- _p_grupos es catálogo fijo (nunca se escribe). Virtual→madre: 32=16avos, 26=8vos, 13=cuartos, 15=semis, 18=final, 19=3er.
-- GOTCHA: `todas_cats` en tvt_api.php filtra WHERE id IN (12 ids hardcodeados) — categoría Senior nueva requiere editar ese IN.
-- Auth admin: _usuario_admin pass EN TEXTO PLANO, sin CSRF, sin autorización por evento en v2 (solo cargador.php filtra _admin_evento).
+## Estado: E0-E2 LIVE en producción (2026-08-01, commit 6d15f2c, push OK)
 
-## Hallazgos inscripción (agente, 2026-08-01)
-- Form público sin login: `inscripcion.php?url=SLUG` (rewrite `torneo-SLUG`). Wizard 4 pasos, pareja se inscribe UNA vez → 2 filas espejo en `_p_incripciones` (ci↔ci_dupla). Conteos dividen /2; generar_equipos deduplica LEAST/GREATEST.
-- `buscar_ci` (AJAX): busca _p_usuarios y padrón _ci_py; FUGA PII (devuelve nombre/cel/email reales en JSON).
-- POST no revalida NADA: categoría no se chequea contra evento/sexo/cupo/estado; `fecha_fin_inscripcion` no se consulta en ningún lado; checkboxes términos solo client-side; check duplicado sin transacción.
-- `post_inscripcion.php` = endpoint legacy huérfano (1 fila sin espejo, SQLi directo). No usar.
-- `boton_team` no existe en código. Cero concepto de club/equipo real en inscripción.
-- v2/post_inscripcion concatenan SQL inyectable; inscripcion.php (v1 nuevo) escapa bien.
+### Verificación E2E completa (2026-08-01, con datos de prueba luego borrados)
+- Form: token inválido→404; render evento+club+categorías; alta pareja (filas espejo
+  id_club, estado='inscripto', medio='interclubes'); duplicado rechazado; tope 2/2;
+  quitar pareja; cierre por fecha_fin_inscripcion bloquea banner y POST. ✓
+- API admin (sesión real): todas_cats=23; crear_categoria; clubes_evento con contador;
+  club_inscriptos con nombres; crear/editar club; eliminar_club rechaza con inscriptos;
+  regenerar_token. ✓
+- Vecinos OK: home 200, inscripcion.php ev13 200, admin 200, kpis OK.
+- Deploy: scp + .bak-20260801 de tvt_admin_v2.php y tvt_api.php en VPS; php -l limpio.
 
-## Plan propuesto (2026-08-01, PENDIENTE APROBACIÓN)
-- E0: DB — `_p_clubes` (token URL por club), ALTER `_p_incripciones` ADD id_club, cat SENIOR + fix IN hardcodeado todas_cats.
-- E1: Admin — tipo evento 5 "Interclubes" en select + pestaña Clubes (CRUD + link token + contadores).
-- E2: `interclubes.php?token=` — form público por club: hasta 2 parejas/categoría, validación server completa (token, fechas, cupos, duplicados), filas espejo con id_club, editable hasta cierre.
-- E3: Vista admin inscriptos por club.
-- Futuro: sorteo público carga manual club→posición + enfrentamientos club vs club (cada cruce expande a partidos por categoría en _todosvstodos).
-- Stack: PHP legacy mismo patrón (tvt_admin_v2/tvt_api), prepared statements en código nuevo, deploy scp + .bak.
+### E0 — DB (HECHO en VPS)
+- Backup: /home/bt.com.py/bt_backup_pre_interclubes_20260801.sql.gz
+- CREATE TABLE `_p_clubes` (id, id_evento, nombre, responsable, celular, email, token UNIQUE 32-hex, estado, created) MyISAM utf8mb4.
+- ALTER `_p_incripciones` ADD id_club INT NULL + KEY.
+
+### E1 — Admin (CÓDIGO LISTO local, falta deploy)
+- tvt_api.php: `todas_cats` sin IN hardcodeado; nuevas acciones `crear_categoria`,
+  `clubes_evento`, `crear_club`, `editar_club`, `eliminar_club` (bloquea si tiene inscriptos),
+  `regenerar_token_club`, `club_inscriptos` — todas con prepared statements.
+- tvt_admin_v2.php: tipo evento 5 "Interclubes" en select (onchange toggleTabClubes);
+  tab 6 "🏢 Clubes" (visible solo tipo 5) con CRUD + copiar link + ver parejas;
+  link "+ crear nueva" categoría en form de agregar cat; tabs dinámicos 5/6
+  (evTabTotalActual, Guardar visible en n>=5); _clubesCache para editar/eliminar.
+- Link del club: https://bt.com.py/interclubes.php?token=XXXX
+
+### E2 — interclubes.php (EN PROGRESO)
+Form público por token: hasta 2 parejas/categoría, CI autocompleta (como inscripcion.php),
+validación server (token, evento abierto + fecha_fin_inscripcion, ≤2 parejas, duplicados,
+categoría del evento), filas espejo en _p_incripciones con id_club, alta jugadores nuevos,
+club puede quitar parejas hasta el cierre.
+
+## Contexto técnico (análisis 2026-08-01)
+- Patrón espejo: pareja = 2 filas en _p_incripciones (ci↔ci_dupla); conteos FLOOR(/2);
+  dedup CAST(ci AS UNSIGNED) < CAST(ci_dupla).
+- buscar_ci en inscripcion.php: _p_usuarios → fallback padrón _ci_py. (Fuga PII en el
+  form viejo: devuelve datos reales en JSON; en interclubes va detrás del token.)
+- fecha_fin_inscripcion NO se valida en el form viejo; en interclubes SÍ.
+- Sorteo actual: determinístico por ranking, plantillas _tvt_plantillas; sin carga manual
+  de posiciones (pendiente para fase sorteo interclubes).
+- Deploy BT: sin git en VPS; editar local (repo BT) → scp con .bak-YYYYMMDD → probar.
+- Baseline commit local: a9ddd4e (sync VPS 16-jul).
+
+## Pendiente
+- Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
+  el tab Clubes ya muestra parejas por club.
+- Fase futura: sorteo público con carga manual (club→grupo/posición en vivo) +
+  enfrentamientos club vs club (cada cruce expande a partidos por categoría).
+- El usuario crea la categoría SENIOR desde el admin cuando arme el evento real.
