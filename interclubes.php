@@ -459,8 +459,8 @@ async function buscarCI(input, idCat, j) {
   const fApellido = form.querySelector('[name="p' + j + '_apellido"]');
   const fCel = form.querySelector('[name="p' + j + '_cel"]');
   const est = document.getElementById('est-' + idCat + '-' + j);
-  fNombre.value = ''; fApellido.value = ''; est.textContent = '';
-  fNombre.readOnly = false; fApellido.readOnly = false;
+  fNombre.value = ''; fApellido.value = ''; fCel.value = ''; est.textContent = '';
+  fNombre.readOnly = false; fApellido.readOnly = false; fCel.readOnly = false;
   if (ci.length < 5) return;
   est.textContent = 'Buscando...'; est.className = 'estado-ci';
   try {
@@ -469,7 +469,11 @@ async function buscarCI(input, idCat, j) {
     if (d.found) {
       fNombre.value = d.nombre; fApellido.value = d.apellido;
       fNombre.readOnly = true; fApellido.readOnly = true;
-      if (d.cel) fCel.value = d.cel;
+      if (d.source === 'usuarios') {
+        // Jugador ya registrado: sus datos no se tocan
+        fCel.value = d.cel || '';
+        fCel.readOnly = true;
+      }
       est.textContent = '✓ Jugador encontrado — los datos se completan solos';
       est.className = 'estado-ci ok';
     } else {
