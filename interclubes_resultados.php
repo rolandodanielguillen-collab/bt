@@ -55,6 +55,8 @@ if (isset($_GET['action'])) {
     if ($action === 'estado') {
         $idCat = abs((int)($_GET['categoria'] ?? 0));
         if (!$idCat) { echo json_encode(['success' => false, 'error' => 'Falta categoría']); exit; }
+        // Avance automático: crea semis/final apenas los resultados lo permiten
+        ic_autogenerar_llaves($mysqli2, $idEvento, $idCat);
 
         // Sorteo → clubes por grupo
         $st = $mysqli2->prepare(
@@ -112,6 +114,7 @@ if (isset($_GET['action'])) {
                     'n2a' => $nombres[$m['ci2_a']] ?? $m['ci2_a'], 'n2b' => $nombres[$m['ci2_b']] ?? $m['ci2_b'],
                     's' => [(int)$m['s1c1'], (int)$m['s1c2'], (int)$m['s2c1'], (int)$m['s2c2'], (int)$m['s3c1'], (int)$m['s3c2']],
                     'sets' => [$s1, $s2], 'ganador' => ic_ganador_partido($m),
+                    'en_juego' => $m['en_juego'] ?? 'no',
                 ];
             }
             return [
@@ -300,9 +303,14 @@ if (isset($_GET['action'])) {
         }
 
         if ($id) {
-            $st = $mysqli2->prepare("UPDATE _ic_partidos SET s1c1=?,s1c2=?,s2c1=?,s2c2=?,s3c1=?,s3c2=? WHERE id=? AND id_evento=? LIMIT 1");
+            $st = $mysqli2->prepare("UPDATE _ic_partidos SET s1c1=?,s1c2=?,s2c1=?,s2c2=?,s3c1=?,s3c2=?, en_juego='no' WHERE id=? AND id_evento=? LIMIT 1");
             $st->bind_param('iiiiiiii', $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2'], $id, $idEvento);
             $st->execute();
+            $st = $mysqli2->prepare("SELECT id_categoria FROM _ic_partidos WHERE id=? LIMIT 1");
+            $st->bind_param('i', $id);
+            $st->execute();
+            $rc = $st->get_result()->fetch_assoc();
+            if ($rc) ic_autogenerar_llaves($mysqli2, $idEvento, (int)$rc['id_categoria']);
             echo json_encode(['success' => true]);
             exit;
         }
@@ -339,6 +347,40 @@ if (isset($_GET['action'])) {
         $st->bind_param('iiisiiissssiiiiii', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $esDes,
             $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b'],
             $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2']);
+        $st->execute();
+        ic_autogenerar_llaves($mysqli2, $idEvento, $idCat);
+        echo json_encode(['success' => true, 'id' => $mysqli2->insert_id]);
+        exit;
+    }
+
+    // Marcar/desmarcar un partido EN JUEGO (crea la fila sin resultado si no existe)
+    if ($action === 'en_juego') {
+        $id = abs((int)($_GET['id'] ?? 0));
+        if ($id) {
+            $st = $mysqli2->prepare("UPDATE _ic_partidos SET en_juego = IF(en_juego='si','no','si') WHERE id=? AND id_evento=? LIMIT 1");
+            $st->bind_param('ii', $id, $idEvento);
+            $st->execute();
+            echo json_encode(['success' => true]);
+            exit;
+        }
+        $idCat  = abs((int)($_GET['categoria'] ?? 0));
+        $grupo  = abs((int)($_GET['grupo'] ?? 0));
+        $club1  = abs((int)($_GET['club1'] ?? 0));
+        $club2  = abs((int)($_GET['club2'] ?? 0));
+        $fase   = preg_replace('/[^a-z0-9]/', '', $_GET['fase'] ?? 'grupo');
+        if (!in_array($fase, ['grupo', 'semi1', 'semi2', 'final', 'tercer'], true)) $fase = 'grupo';
+        $cis = [];
+        foreach (['ci1_a','ci1_b','ci2_a','ci2_b'] as $k) $cis[$k] = preg_replace('/[^0-9]/', '', $_GET[$k] ?? '');
+        if (!$idCat || !$club1 || !$club2 || in_array('', $cis, true)) {
+            echo json_encode(['success' => false, 'error' => 'Faltan datos']); exit;
+        }
+        if ($fase !== 'grupo') $grupo = 0;
+        $st = $mysqli2->prepare(
+            "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, fase, club1, club2, es_desempate, en_juego,
+                ci1_a, ci1_b, ci2_a, ci2_b)
+             VALUES (?,?,?,?,?,?,0,'si',?,?,?,?)");
+        $st->bind_param('iiisiissss', $idEvento, $idCat, $grupo, $fase, $club1, $club2,
+            $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b']);
         $st->execute();
         echo json_encode(['success' => true, 'id' => $mysqli2->insert_id]);
         exit;
@@ -498,9 +540,11 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
     const pref = `${sid}p${i}`;
     h += `<div class="partido"><div class="pt">Partido ${i+1} — Dupla ${i+1} vs Dupla ${i+1}</div>`;
     if (m) {
+      if (m.en_juego === 'si') h += `<div style="margin-bottom:6px;"><span class="badge" style="background:#fdebd2;color:#b06a10;">🎾 EN JUEGO</span></div>`;
       h += renderLados(m, serie);
       h += setsInputs(pref, m.s);
-      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar cambios</button>
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar resultado</button>
+            <button class="btn btn-gh" onclick="toggleEnJuego(${m.id})">${m.en_juego === 'si' ? 'Quitar en juego' : '🎾 En juego'}</button>
             <button class="btn btn-del" onclick="borrar(${m.id})">Borrar</button></div>`;
     } else if (dupA[i] && dupB[i]) {
       h += `<div class="lados">
@@ -508,8 +552,10 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
         <div class="dupla"><div class="club-mini">${esc(serie.nomB)} ${i+1}</div><div>${esc(dupB[i].j1)}</div><div>${esc(dupB[i].j2)}</div></div>
       </div>`;
       h += setsInputs(pref);
-      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {categoria: ${catActual}, grupo: ${grupo}, fase: '${fase}', club1: ${serie.clubA}, club2: ${serie.clubB}, es_desempate: 0,
-        ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'})">Cargar resultado</button></div>`;
+      const args = `{categoria: ${catActual}, grupo: ${grupo}, fase: '${fase}', club1: ${serie.clubA}, club2: ${serie.clubB},
+        ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'}`;
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {...${args}, es_desempate: 0})">Cargar resultado</button>
+            <button class="btn btn-gh" onclick="marcarEnJuego(${args})">🎾 En juego</button></div>`;
     } else {
       h += `<div class="msg">Falta la dupla ${i+1} de ${esc(!dupA[i] ? serie.nomA : serie.nomB)}</div>`;
     }
@@ -562,35 +608,26 @@ async function cargarEstado() {
     box.innerHTML += h;
   });
 
-  // ── Panel de llaves ──
+  // ── Panel de llaves (avance automático) ──
   let h = `<div class="panel" style="border-color:#d8c7f5;"><h2 style="color:var(--morado);">🏆 Llaves — Semis, Final y 3er Puesto</h2>`;
   if (r.llaves_generadas) {
     r.llaves.forEach((serie, si) => { h += serieBloque(serie, `ll${si}`, 0, serie.fase, serie.label); });
-    if (r.puede_generar_final) {
-      h += `<div class="acc"><button class="btn btn-ok" onclick="generarFinal()">Generar Final y 3er Puesto</button></div>`;
-    }
-  } else if (r.puede_generar_llaves) {
-    h += `<div class="msg" style="margin-bottom:10px;">Fase de grupos completa. Se cruzan: 1° Grupo 1 vs 2° Grupo 2 y 1° Grupo 2 vs 2° Grupo 1.</div>
-          <button class="btn btn-ok" onclick="generarLlaves()">Generar semifinales</button>`;
+    if (r.llaves.length < 4) h += `<div class="msg">La Final y el 3er Puesto se arman solos al definirse las dos semifinales.</div>`;
   } else {
-    h += `<div class="msg">Las llaves se generan cuando todas las series de ambos grupos estén definidas.</div>`;
+    h += `<div class="msg">Las semifinales se arman solas al completarse todas las series de ambos grupos (1° Grupo 1 vs 2° Grupo 2 y 1° Grupo 2 vs 2° Grupo 1).</div>`;
   }
   h += `</div>`;
   box.innerHTML += h;
 }
 
-async function generarLlaves() {
-  if (!confirm('¿Generar las semifinales desde las posiciones actuales?')) return;
-  const r = await api({action: 'generar_llaves', categoria: catActual});
+async function marcarEnJuego(args) {
+  const r = await api({action: 'en_juego', ...args});
   if (!r.success) { toast(r.error || 'Error'); return; }
-  toast('Semifinales generadas ✓');
+  toast('Partido en juego 🎾');
   cargarEstado();
 }
-async function generarFinal() {
-  if (!confirm('¿Generar la Final y el 3er Puesto desde las semifinales?')) return;
-  const r = await api({action: 'generar_final', categoria: catActual});
-  if (!r.success) { toast(r.error || 'Error'); return; }
-  toast('Final y 3er puesto generados ✓');
+async function toggleEnJuego(id) {
+  await api({action: 'en_juego', id});
   cargarEstado();
 }
 

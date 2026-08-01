@@ -77,6 +77,82 @@ function ic_estado_serie(array $partidos, int $clubA, int $clubB, int $slots): a
 }
 
 /**
+ * Avance AUTOMÁTICO de llaves: si ambos grupos completaron sus series y no hay
+ * semis → las crea (1°G1 vs 2°G2, 1°G2 vs 2°G1). Si las semis están definidas
+ * y no hay final → crea final y 3er puesto. Nunca borra nada.
+ */
+function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
+    $st = $db->prepare("SELECT fase, clubA, clubB FROM _ic_llaves WHERE id_evento=? AND id_categoria=?");
+    $st->bind_param('ii', $idEvento, $idCat);
+    $st->execute();
+    $res = $st->get_result();
+    $rows = [];
+    while ($r = $res->fetch_assoc()) $rows[$r['fase']] = $r;
+
+    // Paso 1: semis desde posiciones de grupos completos
+    if (!isset($rows['semi1']) || !isset($rows['semi2'])) {
+        $pos = [];
+        foreach ([1, 2] as $g) {
+            $st = $db->prepare(
+                "SELECT s.id_club, cl.nombre FROM _ic_sorteo s JOIN _p_clubes cl ON cl.id = s.id_club
+                  WHERE s.id_evento=? AND s.id_categoria=? AND s.grupo=? ORDER BY s.posicion ASC");
+            $st->bind_param('iii', $idEvento, $idCat, $g);
+            $st->execute();
+            $resG = $st->get_result();
+            $mapa = [];
+            while ($r = $resG->fetch_assoc()) $mapa[(int)$r['id_club']] = $r['nombre'];
+            if (count($mapa) < 2) return;
+            $st = $db->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND grupo=? AND fase='grupo'");
+            $st->bind_param('iii', $idEvento, $idCat, $g);
+            $st->execute();
+            $resP = $st->get_result();
+            $partG = [];
+            while ($r = $resP->fetch_assoc()) $partG[] = $r;
+            $ids = array_keys($mapa);
+            $slotsPorCruce = [];
+            for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++) {
+                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
+                    max(1, min(count(ic_duplas($db, $idEvento, $idCat, $ids[$i])), count(ic_duplas($db, $idEvento, $idCat, $ids[$j]))));
+            }
+            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce);
+            foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) return; // grupo incompleto
+        }
+        $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
+        foreach ([['semi1', $pos[1][0]['id_club'], $pos[2][1]['id_club']],
+                  ['semi2', $pos[2][0]['id_club'], $pos[1][1]['id_club']]] as [$fase, $ca, $cb]) {
+            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
+            $st->execute();
+        }
+        $rows['semi1'] = ['clubA' => $pos[1][0]['id_club'], 'clubB' => $pos[2][1]['id_club']];
+        $rows['semi2'] = ['clubA' => $pos[2][0]['id_club'], 'clubB' => $pos[1][1]['id_club']];
+    }
+
+    // Paso 2: final y 3er puesto desde semis definidas
+    if (!isset($rows['final'])) {
+        $ganadores = $perdedores = [];
+        foreach (['semi1', 'semi2'] as $fase) {
+            $a = (int)$rows[$fase]['clubA']; $b = (int)$rows[$fase]['clubB'];
+            $slots = max(1, min(count(ic_duplas($db, $idEvento, $idCat, $a)), count(ic_duplas($db, $idEvento, $idCat, $b))));
+            $st = $db->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND fase=?");
+            $st->bind_param('iis', $idEvento, $idCat, $fase);
+            $st->execute();
+            $resP = $st->get_result();
+            $ms = [];
+            while ($r = $resP->fetch_assoc()) $ms[] = $r;
+            [, , $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slots);
+            if (!$definida) return;
+            $ganadores[] = $ganador;
+            $perdedores[] = $ganador === $a ? $b : $a;
+        }
+        $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
+        foreach ([['final', $ganadores[0], $ganadores[1]], ['tercer', $perdedores[0], $perdedores[1]]] as [$fase, $ca, $cb]) {
+            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
+            $st->execute();
+        }
+    }
+}
+
+/**
  * Posiciones de un grupo.
  * $clubes: [id_club => nombre] en el grupo. $slotsPorCruce: [clave "menor-mayor" => slots].
  * $partidos: filas _ic_partidos del grupo. Devuelve lista ordenada de stats por club.
