@@ -185,6 +185,13 @@ Implementación:
   en_juego='si' para un slot); guardar resultado la apaga. Admin: botón 🎾 por slot.
 - Verificado con demo ev16: 10 series FINALIZADO, campeón, toggle en juego OK.
 
+## Ajuste layout TVT exacto (commit 20b2c66, LIVE)
+- interclubes-llaves ahora calca el layout del todos-vs-todos: grupos LADO A LADO
+  (groups-grid repeat(auto-fit,minmax(340px,1fr))), botón "☰ Clasificación" arriba de
+  cada grupo que abre MODAL con la tabla (modal-clasif igual TVT), y tabs
+  "Resultados | SF →" — el tab SF contiene semis/final/3er + campeón.
+- La tabla de posiciones ya NO está inline en la página: solo en el modal.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
