@@ -120,6 +120,32 @@ club puede quitar parejas hasta el cierre.
 - Evento 15 real: 5 clubes registrados vía link (ARENA BAR, Vista Bar, En lo de chiqui
   Beach, Moes-Yoyi, Lujini) + categorías SUB 40+ MASC./FEM. creadas por el usuario (25/26).
 
+## Resultados + posiciones (commit 2014b70, LIVE)
+MODELO DEFINITIVO (6 audios del usuario, transcritos con Deepgram — key en jasvir-voz;
+Gemini dio 429): serie club vs club por categoría:
+- Partido 1 = dupla 1 vs dupla 1; Partido 2 = dupla 2 vs dupla 2 (dupla N = orden de
+  inscripción del club, se muestra "Pareja N" en el form). Cada partido: 2 sets + 3er
+  set desempate si empatan sets.
+- Serie 1-1 → 3er PARTIDO de desempate con dupla MEZCLADA (1 jugador de dupla 1 +
+  1 de dupla 2, a elección — selects en la pantalla).
+- Sub 40: 1 dupla por club; Open: hasta 3 → columna `max_parejas` en
+  _relacion_evento_categoria (default 2), editable en admin (whitelist + UI), el form
+  del club la respeta. Slots de serie = min(duplas A, duplas B).
+- Posiciones: 1 PTS por serie ganada (serie definida = slots regulares jugados y wins
+  distintos); desempates: dif partidos → dif sets → dif games. También se jugará 3er
+  puesto tras grupos (fase eliminatoria PENDIENTE).
+Implementación:
+- `_ic_partidos` (+ es_desempate) · `interclubes.functions.php` (ic_sets_partido,
+  ic_ganador_partido, ic_duplas, ic_estado_serie, ic_posiciones) compartido admin+público.
+- `interclubes_resultados.php?evento=N` (sesión admin): pills de categorías con sorteo,
+  por grupo: tabla posiciones + series con slots automáticos por dupla, desempate con
+  selects de jugadores, validación "debe haber ganador", editar sets / borrar partido.
+- Vista pública: en pestaña Sorteo, por grupo: tabla Posiciones (Series/Partidos/Pts) +
+  badge de serie (ganada/en juego/desempate) + partidos con sets (★ = desempate).
+- Admin: botón "Resultados" en pestaña Clubes.
+- E2E verificado (2 clubes test, serie 1-1, desempate mezclado, posiciones OK, público OK);
+  datos de prueba borrados. Audios en BT/ARCHIVOS/1..6.ogg.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
