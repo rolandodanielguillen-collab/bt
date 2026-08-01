@@ -1104,12 +1104,27 @@ if ($action === 'cats_evento') {
 // ACTION: todas_cats — Todas las categorías disponibles
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'todas_cats') {
-    $r = $mysqli2->query("SELECT id, categoria FROM _p_categorias 
-                          WHERE id IN (3,4,5,8,9,10,18,19,20,21,22,23)
-                          ORDER BY categoria ASC");
+    $r = $mysqli2->query("SELECT id, categoria FROM _p_categorias ORDER BY categoria ASC");
     $cats = [];
     if ($r) while ($row = $r->fetch_assoc()) $cats[] = $row;
     resp(['success' => true, 'categorias' => $cats]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ACTION: crear_categoria — Alta de categoría en el catálogo global
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'crear_categoria') {
+    $nombre = trim(strGet('nombre'));
+    if ($nombre === '') respErr('Falta el nombre de la categoría');
+    if (mb_strlen($nombre) > 100) respErr('Nombre demasiado largo');
+    $st = $mysqli2->prepare("SELECT id FROM _p_categorias WHERE categoria = ? LIMIT 1");
+    $st->bind_param('s', $nombre);
+    $st->execute();
+    if ($st->get_result()->num_rows > 0) respErr('Ya existe una categoría con ese nombre');
+    $st = $mysqli2->prepare("INSERT INTO _p_categorias (categoria) VALUES (?)");
+    $st->bind_param('s', $nombre);
+    if (!$st->execute()) respErr('Error al crear la categoría');
+    resp(['success' => true, 'id' => $mysqli2->insert_id, 'mensaje' => 'Categoría creada']);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1813,6 +1828,118 @@ if ($action === 'todas_etiquetas') {
         $etiqs[] = ['id' => (int)$r['id'], 'etiqueta' => $r['etiqueta'], 'value' => $r['value']];
     }
     resp(['success' => true, 'etiquetas' => $etiqs]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INTERCLUBES — Gestión de clubes (_p_clubes)
+// ══════════════════════════════════════════════════════════════════
+
+// ACTION: clubes_evento — Clubes de un evento + parejas inscriptas
+if ($action === 'clubes_evento') {
+    $idEvento = intGet('evento');
+    if (!$idEvento) respErr('Falta evento');
+    $st = $mysqli2->prepare(
+        "SELECT c.id, c.nombre, c.responsable, c.celular, c.email, c.token, c.estado, c.created,
+                (SELECT FLOOR(COUNT(*)/2) FROM _p_incripciones i
+                  WHERE i.id_club = c.id AND i.id_evento = c.id_evento AND i.estado <> 'bloqueado') AS parejas
+           FROM _p_clubes c WHERE c.id_evento = ? ORDER BY c.nombre ASC");
+    $st->bind_param('i', $idEvento);
+    $st->execute();
+    $res = $st->get_result();
+    $clubes = [];
+    while ($row = $res->fetch_assoc()) $clubes[] = $row;
+    resp(['success' => true, 'clubes' => $clubes]);
+}
+
+// ACTION: crear_club — Alta de club con token único
+if ($action === 'crear_club') {
+    $idEvento = intGet('evento');
+    $nombre   = trim(strGet('nombre'));
+    if (!$idEvento || $nombre === '') respErr('Faltan evento o nombre del club');
+    $resp = trim(strGet('responsable'));
+    $cel  = trim(strGet('celular'));
+    $mail = trim(strGet('email'));
+    $st = $mysqli2->prepare("SELECT id FROM _p_clubes WHERE id_evento = ? AND nombre = ? LIMIT 1");
+    $st->bind_param('is', $idEvento, $nombre);
+    $st->execute();
+    if ($st->get_result()->num_rows > 0) respErr('Ya existe un club con ese nombre en este evento');
+    $token = bin2hex(random_bytes(16));
+    $st = $mysqli2->prepare(
+        "INSERT INTO _p_clubes (id_evento, nombre, responsable, celular, email, token) VALUES (?,?,?,?,?,?)");
+    $st->bind_param('isssss', $idEvento, $nombre, $resp, $cel, $mail, $token);
+    if (!$st->execute()) respErr('Error al crear el club');
+    resp(['success' => true, 'id' => $mysqli2->insert_id, 'token' => $token, 'mensaje' => 'Club creado']);
+}
+
+// ACTION: editar_club — Actualiza datos del club
+if ($action === 'editar_club') {
+    $idClub = intGet('id_club');
+    $nombre = trim(strGet('nombre'));
+    if (!$idClub || $nombre === '') respErr('Faltan id_club o nombre');
+    $resp   = trim(strGet('responsable'));
+    $cel    = trim(strGet('celular'));
+    $mail   = trim(strGet('email'));
+    $estado = strGet('estado', 'activo') === 'inactivo' ? 'inactivo' : 'activo';
+    $st = $mysqli2->prepare(
+        "UPDATE _p_clubes SET nombre=?, responsable=?, celular=?, email=?, estado=? WHERE id=? LIMIT 1");
+    $st->bind_param('sssssi', $nombre, $resp, $cel, $mail, $estado, $idClub);
+    if (!$st->execute()) respErr('Error al actualizar el club');
+    resp(['success' => true, 'mensaje' => 'Club actualizado']);
+}
+
+// ACTION: eliminar_club — Solo si no tiene inscripciones
+if ($action === 'eliminar_club') {
+    $idClub = intGet('id_club');
+    if (!$idClub) respErr('Falta id_club');
+    $st = $mysqli2->prepare("SELECT COUNT(*) AS c FROM _p_incripciones WHERE id_club = ?");
+    $st->bind_param('i', $idClub);
+    $st->execute();
+    $c = (int)$st->get_result()->fetch_assoc()['c'];
+    if ($c > 0) respErr('El club tiene inscripciones cargadas. Bloquealo o quitá sus parejas primero.');
+    $st = $mysqli2->prepare("DELETE FROM _p_clubes WHERE id = ? LIMIT 1");
+    $st->bind_param('i', $idClub);
+    $st->execute();
+    resp(['success' => true, 'mensaje' => 'Club eliminado']);
+}
+
+// ACTION: regenerar_token_club — Invalida el link anterior
+if ($action === 'regenerar_token_club') {
+    $idClub = intGet('id_club');
+    if (!$idClub) respErr('Falta id_club');
+    $token = bin2hex(random_bytes(16));
+    $st = $mysqli2->prepare("UPDATE _p_clubes SET token = ? WHERE id = ? LIMIT 1");
+    $st->bind_param('si', $token, $idClub);
+    if (!$st->execute()) respErr('Error al regenerar el token');
+    resp(['success' => true, 'token' => $token, 'mensaje' => 'Token regenerado']);
+}
+
+// ACTION: club_inscriptos — Parejas de un club agrupadas por categoría
+if ($action === 'club_inscriptos') {
+    $idClub = intGet('id_club');
+    if (!$idClub) respErr('Falta id_club');
+    $st = $mysqli2->prepare(
+        "SELECT i.id, i.id_categoria, cat.categoria, i.ci, i.ci_dupla, i.estado,
+                CONCAT(u.nombre,' ',u.apellido) AS jugador
+           FROM _p_incripciones i
+           LEFT JOIN _p_categorias cat ON cat.id = i.id_categoria
+           LEFT JOIN _p_usuarios u ON u.ci = i.ci
+          WHERE i.id_club = ? AND i.estado <> 'bloqueado'
+            AND CAST(i.ci AS UNSIGNED) < CAST(i.ci_dupla AS UNSIGNED)
+          ORDER BY cat.categoria ASC, i.id ASC");
+    $st->bind_param('i', $idClub);
+    $st->execute();
+    $res = $st->get_result();
+    $filas = [];
+    while ($row = $res->fetch_assoc()) {
+        // Nombre del compañero (fila espejo)
+        $st2 = $mysqli2->prepare("SELECT CONCAT(nombre,' ',apellido) AS n FROM _p_usuarios WHERE ci = ? LIMIT 1");
+        $st2->bind_param('s', $row['ci_dupla']);
+        $st2->execute();
+        $r2 = $st2->get_result()->fetch_assoc();
+        $row['jugador2'] = $r2 ? $r2['n'] : '';
+        $filas[] = $row;
+    }
+    resp(['success' => true, 'parejas' => $filas]);
 }
 
 // ── Si ninguna acción coincidió ──

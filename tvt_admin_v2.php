@@ -704,6 +704,7 @@ tr:hover td{background:var(--bg-hover)}
         <div class="tab" onclick="switchEvTab(3,this)">💰 Costos y Fechas</div>
         <div class="tab" onclick="switchEvTab(4,this)">✉️ Email</div>
         <div class="tab" onclick="switchEvTab(5,this)">🏷️ Categorías</div>
+        <div class="tab" id="tabClubesHead" onclick="switchEvTab(6,this)" style="display:none;">🏢 Clubes</div>
       </div>
 
       <!-- TAB 1: General -->
@@ -755,11 +756,12 @@ tr:hover td{background:var(--bg-hover)}
           </div>
           <div class="fg">
             <label class="fl">Tipo/Modalidad</label>
-            <select class="fs" id="evTipo">
+            <select class="fs" id="evTipo" onchange="toggleTabClubes()">
               <option value="">Sin especificar</option>
               <option value="1">Doble Eliminación (Rondas)</option>
               <option value="2">Todos vs Todos</option>
               <option value="3">Eliminación Directa (nueva)</option>
+              <option value="5">Interclubes (por clubes)</option>
             </select>
           </div>
         </div>
@@ -936,7 +938,9 @@ tr:hover td{background:var(--bg-hover)}
         <div class="fg" style="margin-bottom:16px;display:none;background:var(--bg-hover);padding:14px;border-radius:var(--radius-sm);" id="evCatAddForm">
           <label class="fl" style="margin-bottom:8px;">Nueva categoría</label>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
-            <div><label class="fl" style="font-size:11px;">Categoría</label><select class="fs" id="evCatSelect"></select></div>
+            <div><label class="fl" style="font-size:11px;">Categoría
+              <a href="#" onclick="crearCategoriaNueva();return false;" style="color:var(--accent);font-size:10px;margin-left:6px;">+ crear nueva</a>
+            </label><select class="fs" id="evCatSelect"></select></div>
             <div><label class="fl" style="font-size:11px;">Estado</label>
               <select class="fs" id="evCatNuevoEstado">
                 <option value="activo">Activo</option>
@@ -977,6 +981,42 @@ tr:hover td{background:var(--bg-hover)}
 
         <!-- Lista de categorías existentes -->
         <div id="evCatList">
+          <div class="loading" style="min-height:60px;border-radius:8px;"></div>
+        </div>
+      </div>
+
+      <!-- TAB 6: Clubes (solo eventos Interclubes) -->
+      <div id="evTab-6" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:13px;color:var(--text-muted);">Clubes invitados — cada club recibe su link de inscripción</div>
+          <button class="btn btn-p btn-sm" onclick="toggleFormClub()"><i class="fas fa-plus"></i> Agregar club</button>
+        </div>
+
+        <!-- Formulario alta/edición de club -->
+        <div style="margin-bottom:16px;display:none;background:var(--bg-hover);padding:14px;border-radius:var(--radius-sm);" id="evClubForm">
+          <input type="hidden" id="clubEditId" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><label class="fl" style="font-size:11px;">Nombre del club *</label><input class="fi" type="text" id="clubNombre" placeholder="Ej: Club Deportivo X"></div>
+            <div><label class="fl" style="font-size:11px;">Responsable</label><input class="fi" type="text" id="clubResponsable" placeholder="Nombre del dueño/encargado"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div><label class="fl" style="font-size:11px;">Celular</label><input class="fi" type="text" id="clubCelular" placeholder="09..."></div>
+            <div><label class="fl" style="font-size:11px;">Email</label><input class="fi" type="text" id="clubEmail" placeholder="correo@..."></div>
+            <div><label class="fl" style="font-size:11px;">Estado</label>
+              <select class="fs" id="clubEstado">
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ok btn-sm" onclick="guardarClub()"><i class="fas fa-check"></i> Guardar club</button>
+            <button class="btn btn-gh btn-sm" onclick="document.getElementById('evClubForm').style.display='none'">Cancelar</button>
+          </div>
+        </div>
+
+        <!-- Lista de clubes -->
+        <div id="evClubList">
           <div class="loading" style="min-height:60px;border-radius:8px;"></div>
         </div>
       </div>
@@ -2602,10 +2642,19 @@ async function guardarEtiquetaManual() {
 
 // ═══ NUEVO EVENTO ═══
 let evTabActual = 1;
-const evTabTotal = 5;
+
+// El tab 6 (Clubes) solo existe para eventos Interclubes (tipo 5)
+function esInterclubes() { return document.getElementById('evTipo').value === '5'; }
+function evTabTotalActual() { return esInterclubes() ? 6 : 5; }
+
+function toggleTabClubes() {
+  const head = document.getElementById('tabClubesHead');
+  head.style.display = esInterclubes() ? '' : 'none';
+  if (!esInterclubes() && evTabActual === 6) switchEvTab(5, null);
+}
 
 function switchEvTab(n, el) {
-  for (let i = 1; i <= evTabTotal; i++) {
+  for (let i = 1; i <= 6; i++) {
     const t = document.getElementById('evTab-' + i);
     if (t) t.style.display = i === n ? 'block' : 'none';
   }
@@ -2613,12 +2662,14 @@ function switchEvTab(n, el) {
     t.classList.toggle('active', idx + 1 === n);
   });
   evTabActual = n;
+  const total = evTabTotalActual();
   document.getElementById('btnEvPrev').style.display  = n > 1 ? 'inline-flex' : 'none';
-  document.getElementById('btnEvNext').style.display  = n < evTabTotal ? 'inline-flex' : 'none';
-  document.getElementById('btnEvGuardar').style.display = n === evTabTotal ? 'inline-flex' : 'none';
+  document.getElementById('btnEvNext').style.display  = n < total ? 'inline-flex' : 'none';
+  document.getElementById('btnEvGuardar').style.display = n >= 5 ? 'inline-flex' : 'none';
   if (n === 5) cargarCatsEvento();
+  if (n === 6) cargarClubesEvento();
 }
-function nextEvTab() { if (evTabActual < evTabTotal) switchEvTab(evTabActual + 1, null); }
+function nextEvTab() { if (evTabActual < evTabTotalActual()) switchEvTab(evTabActual + 1, null); }
 function prevEvTab() { if (evTabActual > 1) switchEvTab(evTabActual - 1, null); }
 
 // Textos hardcodeados
@@ -2705,6 +2756,7 @@ function abrirNuevoEvento() {
   document.getElementById('evBasesCond').value='';
   document.getElementById('evFixturePublicado').value='si';
   document.getElementById('evEmailInscr').value='no';
+  toggleTabClubes();
   openModal('modalEvento');
   switchEvTab(1, null);
   loadCiudades();
@@ -2731,6 +2783,7 @@ async function editarEvento(id) {
   document.getElementById('evCircuito').value      = e.id_circuito || 1;
   document.getElementById('evOrganizador').value   = e.id_organizador || 1;
   document.getElementById('evTipo').value          = e.id_tipo_evento || '';
+  toggleTabClubes();
   // descripcion se maneja via evDescImgUrl (ver más abajo)
   document.getElementById('evVersionForm').value   = e.version_formulario || 'v2';
   document.getElementById('evUrlFixture').value    = e.url_fixture || 'grafico-llaves';
@@ -3293,6 +3346,160 @@ async function quitarCatEvento(idRelacion, nombre) {
   const r = await api({action: 'quitar_cat_evento', id_relacion: idRelacion});
   if (r.success) cargarCatsEvento();
   else alert('Error: ' + (r.error || 'desconocido'));
+}
+
+async function crearCategoriaNueva() {
+  const nombre = prompt('Nombre de la nueva categoría (ej: SENIOR MASC.):');
+  if (!nombre || !nombre.trim()) return;
+  const r = await api({action: 'crear_categoria', nombre: nombre.trim()});
+  if (r.success) {
+    await cargarTodasCats();
+    document.getElementById('evCatSelect').value = r.id;
+  } else {
+    alert('Error: ' + (r.error || 'desconocido'));
+  }
+}
+
+// ═══ TAB 6: CLUBES (INTERCLUBES) ═══
+let _clubesCache = {};
+
+function toggleFormClub() {
+  const idEv = document.getElementById('evId').value;
+  if (!idEv) { alert('Guardá el evento primero'); return; }
+  const form = document.getElementById('evClubForm');
+  const abrir = form.style.display === 'none' || !form.style.display;
+  if (abrir) {
+    document.getElementById('clubEditId').value = '';
+    ['clubNombre','clubResponsable','clubCelular','clubEmail'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('clubEstado').value = 'activo';
+  }
+  form.style.display = abrir ? 'block' : 'none';
+}
+
+async function cargarClubesEvento() {
+  const idEv = document.getElementById('evId').value;
+  const box = document.getElementById('evClubList');
+  if (!idEv) { box.innerHTML = '<div class="empty">Guardá el evento primero para agregar clubes</div>'; return; }
+  box.innerHTML = '<div class="loading" style="min-height:60px;border-radius:8px;"></div>';
+  const r = await api({action: 'clubes_evento', evento: idEv});
+  if (!r.success) { box.innerHTML = '<div class="empty">Error al cargar</div>'; return; }
+  if (!r.clubes.length) {
+    box.innerHTML = '<div class="empty" style="padding:20px;">Sin clubes. Usá el botón Agregar club.</div>';
+    return;
+  }
+  _clubesCache = {};
+  r.clubes.forEach(c => { _clubesCache[c.id] = c; });
+  let h = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:var(--bg-primary);color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
+        <th style="padding:8px 10px;text-align:left;">Club</th>
+        <th style="padding:8px 6px;text-align:left;">Responsable</th>
+        <th style="padding:8px 6px;text-align:center;">Parejas</th>
+        <th style="padding:8px 6px;text-align:center;">Estado</th>
+        <th style="padding:8px 6px;text-align:center;">Acciones</th>
+      </tr>
+    </thead><tbody>`;
+  r.clubes.forEach(c => {
+    const estColor = c.estado === 'activo' ? 'var(--success)' : 'var(--danger)';
+    h += `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 10px;font-weight:600;">${c.nombre}</td>
+      <td style="padding:10px 6px;font-size:12px;">${c.responsable || '—'}<br><span style="color:var(--text-muted);font-size:11px;">${c.celular || ''}</span></td>
+      <td style="padding:10px 6px;text-align:center;font-weight:700;">${c.parejas}</td>
+      <td style="padding:10px 6px;text-align:center;"><span style="color:${estColor};font-size:11px;font-weight:700;">${c.estado}</span></td>
+      <td style="padding:10px 6px;text-align:center;white-space:nowrap;">
+        <button class="btn btn-gh btn-sm" title="Copiar link de inscripción" onclick="copiarLinkClub('${c.token}',this)"><i class="fas fa-link"></i></button>
+        <button class="btn btn-gh btn-sm" title="Ver parejas" onclick="verParejasClub(${c.id})"><i class="fas fa-users"></i></button>
+        <button class="btn btn-gh btn-sm" title="Editar" onclick="editarClub(${c.id})"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-gh btn-sm" title="Regenerar link (invalida el anterior)" onclick="regenerarTokenClub(${c.id})"><i class="fas fa-rotate"></i></button>
+        <button class="btn btn-sm" style="background:var(--danger-bg);color:var(--danger);" title="Eliminar" onclick="eliminarClub(${c.id})"><i class="fas fa-times"></i></button>
+      </td>
+    </tr>
+    <tr id="club-parejas-${c.id}" style="display:none;background:var(--bg-hover);"><td colspan="5" style="padding:12px 10px;"></td></tr>`;
+  });
+  h += '</tbody></table>';
+  box.innerHTML = h;
+}
+
+function copiarLinkClub(token, btn) {
+  const url = window.location.origin + '/interclubes.php?token=' + token;
+  navigator.clipboard.writeText(url).then(() => {
+    const prev = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check" style="color:var(--success);"></i>';
+    setTimeout(() => { btn.innerHTML = prev; }, 1200);
+  });
+}
+
+function editarClub(idClub) {
+  const c = _clubesCache[idClub];
+  if (!c) return;
+  const form = document.getElementById('evClubForm');
+  form.style.display = 'block';
+  document.getElementById('clubEditId').value = c.id;
+  document.getElementById('clubNombre').value = c.nombre || '';
+  document.getElementById('clubResponsable').value = c.responsable || '';
+  document.getElementById('clubCelular').value = c.celular || '';
+  document.getElementById('clubEmail').value = c.email || '';
+  document.getElementById('clubEstado').value = c.estado || 'activo';
+  form.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+async function guardarClub() {
+  const idEv = document.getElementById('evId').value;
+  const idClub = document.getElementById('clubEditId').value;
+  const datos = {
+    nombre:      document.getElementById('clubNombre').value.trim(),
+    responsable: document.getElementById('clubResponsable').value.trim(),
+    celular:     document.getElementById('clubCelular').value.trim(),
+    email:       document.getElementById('clubEmail').value.trim(),
+    estado:      document.getElementById('clubEstado').value,
+  };
+  if (!datos.nombre) { alert('El nombre del club es obligatorio'); return; }
+  const r = idClub
+    ? await api({action: 'editar_club', id_club: idClub, ...datos})
+    : await api({action: 'crear_club', evento: idEv, ...datos});
+  if (r.success) {
+    document.getElementById('evClubForm').style.display = 'none';
+    cargarClubesEvento();
+  } else {
+    alert('Error: ' + (r.error || 'desconocido'));
+  }
+}
+
+async function regenerarTokenClub(idClub) {
+  if (!confirm('¿Regenerar el link? El link anterior deja de funcionar.')) return;
+  const r = await api({action: 'regenerar_token_club', id_club: idClub});
+  if (r.success) cargarClubesEvento();
+  else alert('Error: ' + (r.error || 'desconocido'));
+}
+
+async function eliminarClub(idClub) {
+  const nombre = (_clubesCache[idClub] || {}).nombre || '';
+  if (!confirm('¿Eliminar el club "' + nombre + '"?')) return;
+  const r = await api({action: 'eliminar_club', id_club: idClub});
+  if (r.success) cargarClubesEvento();
+  else alert('Error: ' + (r.error || 'desconocido'));
+}
+
+async function verParejasClub(idClub) {
+  const nombre = (_clubesCache[idClub] || {}).nombre || '';
+  const row = document.getElementById('club-parejas-' + idClub);
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = 'table-row';
+  const cell = row.querySelector('td');
+  cell.innerHTML = '<div class="loading" style="min-height:40px;border-radius:8px;"></div>';
+  const r = await api({action: 'club_inscriptos', id_club: idClub});
+  if (!r.success) { cell.innerHTML = 'Error al cargar'; return; }
+  if (!r.parejas.length) { cell.innerHTML = `<em style="color:var(--text-muted);">Sin parejas inscriptas de ${nombre}</em>`; return; }
+  let h = '';
+  let catActual = null;
+  r.parejas.forEach(p => {
+    if (p.categoria !== catActual) {
+      catActual = p.categoria;
+      h += `<div style="font-weight:700;font-size:11px;text-transform:uppercase;color:var(--accent);margin:8px 0 4px;">${p.categoria || 'Sin categoría'}</div>`;
+    }
+    h += `<div style="padding:3px 0;font-size:12px;">• ${p.jugador || p.ci} <span style="color:var(--text-muted);">(${p.ci})</span> / ${p.jugador2 || p.ci_dupla} <span style="color:var(--text-muted);">(${p.ci_dupla})</span></div>`;
+  });
+  cell.innerHTML = h;
 }
 
 // ═══ POPULATE EVENT SELECTS ═══
