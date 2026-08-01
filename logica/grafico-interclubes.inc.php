@@ -18,7 +18,7 @@ if (preg_match('/^[a-f0-9]{40}$/i', $SHA1evento)) {
         "SELECT id, evento, nombre_evento2, estado,
                 date_format(fecha, '%d-%m-%Y') AS fecha,
                 date_format(fecha_fin, '%d-%m-%Y') AS fecha_fin,
-                descripcion, flyer, boton_fixture
+                descripcion, flyer, boton_fixture, boton_llaves
            FROM _p_eventos
           WHERE sha1(id) = ? AND id_tipo_evento = 5 LIMIT 1");
     $st->bind_param('s', $SHA1evento);
@@ -135,6 +135,36 @@ function ic_n_duplas($db, $idEv, $idCat, $idClub) {
     return $icDuplasCache[$k];
 }
 
+// ── Llaves (semis, final, 3er puesto) por categoría ──────────────────────────
+$llavesIC = [];   // [idcat => [fase => serie]]
+$hayLlaves = false;
+if ($haySorteo) {
+    $st = $mysqli2->prepare(
+        "SELECT l.id_categoria, l.fase, l.clubA, l.clubB, ca.nombre AS nomA, cb.nombre AS nomB
+           FROM _ic_llaves l
+           JOIN _p_clubes ca ON ca.id = l.clubA
+           JOIN _p_clubes cb ON cb.id = l.clubB
+          WHERE l.id_evento = ?");
+    $st->bind_param('i', $idEventos);
+    $st->execute();
+    $res = $st->get_result();
+    while ($r = $res->fetch_assoc()) {
+        $idCatL = (int)$r['id_categoria'];
+        $a = (int)$r['clubA']; $b = (int)$r['clubB'];
+        $slots = max(1, min(ic_n_duplas($mysqli2, $idEventos, $idCatL, $a), ic_n_duplas($mysqli2, $idEventos, $idCatL, $b)));
+        $ms = array_values(array_filter($partidosIC[$idCatL][0] ?? [], fn($m) => $m['fase'] === $r['fase']));
+        usort($ms, fn($x, $y) => [(int)$x['es_desempate'], (int)$x['id']] <=> [(int)$y['es_desempate'], (int)$y['id']]);
+        [$wA, $wB, $definida, $ganador, $necesitaDes] = ic_estado_serie($ms, $a, $b, $slots);
+        $llavesIC[$idCatL][$r['fase']] = [
+            'clubA' => $a, 'clubB' => $b, 'nomA' => $r['nomA'], 'nomB' => $r['nomB'],
+            'winsA' => $wA, 'winsB' => $wB, 'definida' => $definida, 'ganador' => $ganador,
+            'necesita_desempate' => $necesitaDes, 'partidos' => $ms,
+        ];
+        $hayLlaves = true;
+    }
+}
+$verLlaves = $hayLlaves && ($rowEvento['boton_llaves'] === 'visible');
+
 function ic_nombre($n) {
     if (!mb_check_encoding((string)$n, 'UTF-8')) $n = mb_convert_encoding($n, 'UTF-8', 'ISO-8859-1');
     return htmlspecialchars(mb_strtoupper(trim((string)$n), 'UTF-8'));
@@ -229,6 +259,12 @@ function ic_nombre($n) {
                             <button id="pillSorteo" onclick="vistaIC('sorteo')"
                                     class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md bg-blue-600 text-white shadow">
                                 <i class="fa-solid fa-shuffle mr-1"></i> Sorteo
+                            </button>
+                            <?php endif; ?>
+                            <?php if ($verLlaves): ?>
+                            <button id="pillLlaves" onclick="vistaIC('llaves')"
+                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md text-gray-600 hover:text-gray-900">
+                                <i class="fa-solid fa-trophy mr-1"></i> Llaves
                             </button>
                             <?php endif; ?>
                             <button id="pillClubes" onclick="vistaIC('clubes')"
@@ -356,6 +392,75 @@ function ic_nombre($n) {
                     </div>
                     <?php endif; ?>
 
+                    <?php if ($verLlaves): ?>
+                    <!-- ══ VISTA LLAVES (semis, final, 3er puesto) ══ -->
+                    <div id="vistaLlaves" class="space-y-6" style="display:none">
+                        <?php
+                        $catNombresLl = [];
+                        foreach ($sorteoIC as $nc => $cd) $catNombresLl[$cd['idcat']] = $nc;
+                        foreach ($llavesIC as $idCatL => $fases):
+                            $renderSerieLl = function ($fase, $label, $s) use ($icNombres) {
+                                if (!$s) return;
+                                $ganName = $s['definida'] ? ($s['ganador'] === $s['clubA'] ? $s['nomA'] : $s['nomB']) : '';
+                                ?>
+                                <div class="border border-gray-700 rounded-lg overflow-hidden">
+                                    <div class="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                                        <span class="text-[.65rem] font-extrabold uppercase tracking-widest" style="color:#c4b5fd"><?php echo $label; ?></span>
+                                        <?php if ($s['definida']): ?>
+                                        <span class="text-[.6rem] font-extrabold px-1.5 py-0.5 rounded" style="background:rgba(34,197,94,.15);color:#4ade80"><?php echo ic_nombre($ganName); ?> <?php echo max($s['winsA'], $s['winsB']); ?>-<?php echo min($s['winsA'], $s['winsB']); ?></span>
+                                        <?php elseif ($s['partidos']): ?>
+                                        <span class="text-[.6rem] font-extrabold px-1.5 py-0.5 rounded" style="background:rgba(234,179,8,.15);color:#fbbf24"><?php echo $s['winsA']; ?>-<?php echo $s['winsB']; ?><?php echo $s['necesita_desempate'] ? ' · desempate' : ''; ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="bg-gray-900 px-3 py-2">
+                                        <div class="text-[.8rem] font-bold uppercase <?php echo $s['definida'] && $s['ganador'] === $s['clubA'] ? 'text-green-400' : 'text-slate-100'; ?>"><?php echo ic_nombre($s['nomA']); ?></div>
+                                        <div class="text-[.6rem] font-extrabold py-0.5" style="color:#93c5fd">VS</div>
+                                        <div class="text-[.8rem] font-bold uppercase <?php echo $s['definida'] && $s['ganador'] === $s['clubB'] ? 'text-green-400' : 'text-slate-100'; ?>"><?php echo ic_nombre($s['nomB']); ?></div>
+                                        <?php if ($s['partidos']): ?>
+                                        <div class="mt-1.5 pt-1.5 border-t border-gray-800">
+                                            <?php foreach ($s['partidos'] as $m):
+                                                $score = [];
+                                                foreach ([['s1c1','s1c2'],['s2c1','s2c2'],['s3c1','s3c2']] as [$ka,$kb]) {
+                                                    if ((int)$m[$ka] === 0 && (int)$m[$kb] === 0) continue;
+                                                    $score[] = $m[$ka] . '-' . $m[$kb];
+                                                }
+                                                $gan = ic_ganador_partido($m);
+                                            ?>
+                                            <div class="text-[.62rem] py-0.5" style="color:rgba(255,255,255,.55)">
+                                                <?php if ((int)$m['es_desempate']): ?><span style="color:#c4b5fd;font-weight:800">★</span><?php endif; ?>
+                                                <span style="<?php echo $gan === 1 ? 'color:#e2e8f0;font-weight:700' : ''; ?>"><?php echo htmlspecialchars(($icNombres[$m['ci1_a']] ?? $m['ci1_a']) . ' / ' . ($icNombres[$m['ci1_b']] ?? $m['ci1_b'])); ?></span>
+                                                <span class="font-extrabold" style="color:#93c5fd"> <?php echo implode(' ', $score); ?> </span>
+                                                <span style="<?php echo $gan === 2 ? 'color:#e2e8f0;font-weight:700' : ''; ?>"><?php echo htmlspecialchars(($icNombres[$m['ci2_a']] ?? $m['ci2_a']) . ' / ' . ($icNombres[$m['ci2_b']] ?? $m['ci2_b'])); ?></span>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php
+                            };
+                        ?>
+                        <div>
+                            <h3 class="text-center text-base font-extrabold text-gray-900 uppercase tracking-wide mb-3"><?php echo htmlspecialchars($catNombresLl[$idCatL] ?? ''); ?></h3>
+                            <?php if (isset($fases['final']) && $fases['final']['definida']):
+                                $campeon = $fases['final']['ganador'] === $fases['final']['clubA'] ? $fases['final']['nomA'] : $fases['final']['nomB']; ?>
+                            <div class="text-center mb-3">
+                                <span class="inline-block bg-yellow-400 text-yellow-900 text-sm font-extrabold uppercase tracking-wide px-5 py-1.5 rounded-full">🏆 Campeón: <?php echo ic_nombre($campeon); ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <?php
+                                $renderSerieLl('semi1', 'Semifinal 1', $fases['semi1'] ?? null);
+                                $renderSerieLl('semi2', 'Semifinal 2', $fases['semi2'] ?? null);
+                                $renderSerieLl('final', '🏆 Final', $fases['final'] ?? null);
+                                $renderSerieLl('tercer', '3er Puesto', $fases['tercer'] ?? null);
+                                ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- ══ VISTA POR CLUBES ══ -->
                     <div id="vistaClubes" class="space-y-3" <?php if ($haySorteo) echo 'style="display:none"'; ?>>
                         <?php if (!$clubesIC): ?>
@@ -457,8 +562,8 @@ function ic_nombre($n) {
             }
         }
         function vistaIC(cual) {
-            const vistas = { sorteo: 'vistaSorteo', clubes: 'vistaClubes', cats: 'vistaCats' };
-            const pills  = { sorteo: 'pillSorteo',  clubes: 'pillClubes', cats: 'pillCats' };
+            const vistas = { sorteo: 'vistaSorteo', llaves: 'vistaLlaves', clubes: 'vistaClubes', cats: 'vistaCats' };
+            const pills  = { sorteo: 'pillSorteo',  llaves: 'pillLlaves',  clubes: 'pillClubes', cats: 'pillCats' };
             const on  = ['bg-blue-600','text-white','shadow'];
             const off = ['text-gray-600'];
             for (const k in vistas) {

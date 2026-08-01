@@ -86,17 +86,51 @@ if (isset($_GET['action'])) {
             while ($x = $r2->fetch_assoc()) $nombres[trim($x['ci'])] = $x['n'];
         }
 
+        // Duplas y jugadores de TODOS los clubes sorteados (grupos y llaves los comparten)
+        $mapaTodos = [];
+        foreach ($grupos as $g => $clubesG) foreach ($clubesG as $c) $mapaTodos[(int)$c['id_club']] = $c['nombre'];
+        $duplas = [];
+        foreach ($mapaTodos as $idCl => $nom) $duplas[$idCl] = ic_duplas($mysqli2, $idEvento, $idCat, $idCl);
+        $jugadoresAll = [];
+        foreach ($duplas as $idCl => $ds) foreach ($ds as $d) {
+            $jugadoresAll[$idCl][] = ['ci' => $d['ci'], 'nombre' => $d['j1'] ?: $d['ci']];
+            $jugadoresAll[$idCl][] = ['ci' => $d['ci_dupla'], 'nombre' => $d['j2'] ?: $d['ci_dupla']];
+        }
+
+        // Helper: arma la serie entre 2 clubes desde una lista de partidos
+        $armarSerie = function (array $ms, int $a, int $b, int $slots) use ($mapaTodos, $nombres) {
+            usort($ms, fn($x, $y) => [(int)$x['es_desempate'], (int)$x['id']] <=> [(int)$y['es_desempate'], (int)$y['id']]);
+            [$wA, $wB, $definida, $ganador, $necesitaDes] = ic_estado_serie($ms, $a, $b, $slots);
+            $msOut = [];
+            foreach ($ms as $m) {
+                [$s1, $s2] = ic_sets_partido($m);
+                $msOut[] = [
+                    'id' => (int)$m['id'], 'es_desempate' => (int)$m['es_desempate'],
+                    'club1' => (int)$m['club1'], 'club2' => (int)$m['club2'],
+                    'ci1_a' => $m['ci1_a'], 'ci1_b' => $m['ci1_b'], 'ci2_a' => $m['ci2_a'], 'ci2_b' => $m['ci2_b'],
+                    'n1a' => $nombres[$m['ci1_a']] ?? $m['ci1_a'], 'n1b' => $nombres[$m['ci1_b']] ?? $m['ci1_b'],
+                    'n2a' => $nombres[$m['ci2_a']] ?? $m['ci2_a'], 'n2b' => $nombres[$m['ci2_b']] ?? $m['ci2_b'],
+                    's' => [(int)$m['s1c1'], (int)$m['s1c2'], (int)$m['s2c1'], (int)$m['s2c2'], (int)$m['s3c1'], (int)$m['s3c2']],
+                    'sets' => [$s1, $s2], 'ganador' => ic_ganador_partido($m),
+                ];
+            }
+            return [
+                'clubA' => $a, 'clubB' => $b,
+                'nomA' => $mapaTodos[$a] ?? ('Club #' . $a), 'nomB' => $mapaTodos[$b] ?? ('Club #' . $b),
+                'slots' => $slots, 'winsA' => $wA, 'winsB' => $wB,
+                'definida' => $definida, 'ganador' => $ganador, 'necesita_desempate' => $necesitaDes,
+                'partidos' => $msOut,
+            ];
+        };
+
         $out = [];
+        $gruposCompletos = true;
         foreach ($grupos as $g => $clubesG) {
             $mapa = [];
             foreach ($clubesG as $c) $mapa[(int)$c['id_club']] = $c['nombre'];
 
-            // Duplas por club
-            $duplas = [];
-            foreach ($mapa as $idCl => $nom) $duplas[$idCl] = ic_duplas($mysqli2, $idEvento, $idCat, $idCl);
-
-            // Partidos del grupo
-            $partG = array_values(array_filter($partidos, fn($m) => (int)$m['grupo'] === $g));
+            // Partidos del grupo (solo fase grupo)
+            $partG = array_values(array_filter($partidos, fn($m) => (int)$m['grupo'] === $g && $m['fase'] === 'grupo'));
 
             // Series round robin
             $series = [];
@@ -109,48 +143,137 @@ if (isset($_GET['action'])) {
                 $slotsPorCruce[$k] = $slots;
                 $ms = array_values(array_filter($partG, fn($m) =>
                     (min((int)$m['club1'], (int)$m['club2']) . '-' . max((int)$m['club1'], (int)$m['club2'])) === $k));
-                usort($ms, fn($x, $y) => [(int)$x['es_desempate'], (int)$x['id']] <=> [(int)$y['es_desempate'], (int)$y['id']]);
-                [$wA, $wB, $definida, $ganador, $necesitaDes] = ic_estado_serie($ms, $a, $b, $slots);
-                $msOut = [];
-                foreach ($ms as $m) {
-                    [$s1, $s2] = ic_sets_partido($m);
-                    $msOut[] = [
-                        'id' => (int)$m['id'], 'es_desempate' => (int)$m['es_desempate'],
-                        'club1' => (int)$m['club1'], 'club2' => (int)$m['club2'],
-                        'ci1_a' => $m['ci1_a'], 'ci1_b' => $m['ci1_b'], 'ci2_a' => $m['ci2_a'], 'ci2_b' => $m['ci2_b'],
-                        'n1a' => $nombres[$m['ci1_a']] ?? $m['ci1_a'], 'n1b' => $nombres[$m['ci1_b']] ?? $m['ci1_b'],
-                        'n2a' => $nombres[$m['ci2_a']] ?? $m['ci2_a'], 'n2b' => $nombres[$m['ci2_b']] ?? $m['ci2_b'],
-                        's' => [(int)$m['s1c1'], (int)$m['s1c2'], (int)$m['s2c1'], (int)$m['s2c2'], (int)$m['s3c1'], (int)$m['s3c2']],
-                        'sets' => [$s1, $s2], 'ganador' => ic_ganador_partido($m),
-                    ];
-                }
-                $series[] = [
-                    'clubA' => $a, 'clubB' => $b, 'nomA' => $mapa[$a], 'nomB' => $mapa[$b],
-                    'slots' => $slots, 'winsA' => $wA, 'winsB' => $wB,
-                    'definida' => $definida, 'ganador' => $ganador, 'necesita_desempate' => $necesitaDes,
-                    'partidos' => $msOut,
-                ];
+                $serie = $armarSerie($ms, $a, $b, $slots);
+                if (!$serie['definida']) $gruposCompletos = false;
+                $series[] = $serie;
             }
-
-            // Jugadores por club (para el desempate mezclado)
-            $jugadores = [];
-            foreach ($duplas as $idCl => $ds) {
-                foreach ($ds as $ix => $d) {
-                    $jugadores[$idCl][] = ['ci' => $d['ci'], 'nombre' => $d['j1'] ?: $d['ci']];
-                    $jugadores[$idCl][] = ['ci' => $d['ci_dupla'], 'nombre' => $d['j2'] ?: $d['ci_dupla']];
-                }
-            }
+            if ($n < 2) $gruposCompletos = false;
 
             $out[] = [
                 'grupo' => $g,
                 'clubes' => array_map(fn($c) => ['id' => (int)$c['id_club'], 'nombre' => $c['nombre']], $clubesG),
-                'duplas' => $duplas,
-                'jugadores' => $jugadores,
                 'series' => $series,
                 'posiciones' => ic_posiciones($mapa, $partG, $slotsPorCruce),
             ];
         }
-        echo json_encode(['success' => true, 'grupos' => $out]);
+        if (count($grupos) < 2) $gruposCompletos = false;
+
+        // ── Llaves (semis, final, 3er puesto) ──
+        $st = $mysqli2->prepare("SELECT * FROM _ic_llaves WHERE id_evento = ? AND id_categoria = ?");
+        $st->bind_param('ii', $idEvento, $idCat);
+        $st->execute();
+        $resL = $st->get_result();
+        $llavesRows = [];
+        while ($r = $resL->fetch_assoc()) $llavesRows[$r['fase']] = $r;
+
+        $llaves = [];
+        $semisDefinidas = 0;
+        foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2', 'final' => 'Final', 'tercer' => '3er Puesto'] as $fase => $label) {
+            if (!isset($llavesRows[$fase])) continue;
+            $a = (int)$llavesRows[$fase]['clubA']; $b = (int)$llavesRows[$fase]['clubB'];
+            $slots = max(1, min(count($duplas[$a] ?? []), count($duplas[$b] ?? [])));
+            $ms = array_values(array_filter($partidos, fn($m) => $m['fase'] === $fase));
+            $serie = $armarSerie($ms, $a, $b, $slots);
+            if (in_array($fase, ['semi1', 'semi2'], true) && $serie['definida']) $semisDefinidas++;
+            $llaves[] = ['fase' => $fase, 'label' => $label] + $serie;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'grupos' => $out,
+            'duplas' => $duplas,
+            'jugadores' => $jugadoresAll,
+            'llaves' => $llaves,
+            'llaves_generadas' => !empty($llavesRows),
+            'puede_generar_llaves' => $gruposCompletos && empty($llavesRows),
+            'puede_generar_final' => $semisDefinidas === 2 && !isset($llavesRows['final']),
+        ]);
+        exit;
+    }
+
+    // Generar semifinales desde las posiciones (1°G1 vs 2°G2, 1°G2 vs 2°G1)
+    if ($action === 'generar_llaves') {
+        $idCat = abs((int)($_GET['categoria'] ?? 0));
+        if (!$idCat) { echo json_encode(['success' => false, 'error' => 'Falta categoría']); exit; }
+        $st = $mysqli2->prepare("SELECT COUNT(*) c FROM _ic_llaves WHERE id_evento=? AND id_categoria=?");
+        $st->bind_param('ii', $idEvento, $idCat);
+        $st->execute();
+        if ((int)$st->get_result()->fetch_assoc()['c'] > 0) {
+            echo json_encode(['success' => false, 'error' => 'Las llaves ya fueron generadas']); exit;
+        }
+        // Posiciones por grupo
+        $pos = [];
+        foreach ([1, 2] as $g) {
+            $st = $mysqli2->prepare(
+                "SELECT s.id_club, cl.nombre FROM _ic_sorteo s JOIN _p_clubes cl ON cl.id = s.id_club
+                  WHERE s.id_evento=? AND s.id_categoria=? AND s.grupo=? ORDER BY s.posicion ASC");
+            $st->bind_param('iii', $idEvento, $idCat, $g);
+            $st->execute();
+            $resG = $st->get_result();
+            $mapa = [];
+            while ($r = $resG->fetch_assoc()) $mapa[(int)$r['id_club']] = $r['nombre'];
+            if (count($mapa) < 2) { echo json_encode(['success' => false, 'error' => "El grupo $g no tiene suficientes clubes"]); exit; }
+            $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND grupo=? AND fase='grupo'");
+            $st->bind_param('iii', $idEvento, $idCat, $g);
+            $st->execute();
+            $resP = $st->get_result();
+            $partG = [];
+            while ($r = $resP->fetch_assoc()) $partG[] = $r;
+            $ids = array_keys($mapa);
+            $slotsPorCruce = [];
+            for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++) {
+                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
+                    max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$i])), count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$j]))));
+            }
+            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce);
+            // Todas las series del grupo deben estar definidas (sj = series jugadas por club)
+            foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) {
+                echo json_encode(['success' => false, 'error' => "El grupo $g todavía tiene series sin definir"]); exit;
+            }
+        }
+        $st = $mysqli2->prepare("INSERT INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
+        foreach ([['semi1', $pos[1][0]['id_club'], $pos[2][1]['id_club']],
+                  ['semi2', $pos[2][0]['id_club'], $pos[1][1]['id_club']]] as [$fase, $ca, $cb]) {
+            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
+            $st->execute();
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    // Generar final y 3er puesto desde las semis definidas
+    if ($action === 'generar_final') {
+        $idCat = abs((int)($_GET['categoria'] ?? 0));
+        if (!$idCat) { echo json_encode(['success' => false, 'error' => 'Falta categoría']); exit; }
+        $st = $mysqli2->prepare("SELECT * FROM _ic_llaves WHERE id_evento=? AND id_categoria=?");
+        $st->bind_param('ii', $idEvento, $idCat);
+        $st->execute();
+        $resL = $st->get_result();
+        $rows = [];
+        while ($r = $resL->fetch_assoc()) $rows[$r['fase']] = $r;
+        if (isset($rows['final'])) { echo json_encode(['success' => false, 'error' => 'La final ya fue generada']); exit; }
+        if (!isset($rows['semi1']) || !isset($rows['semi2'])) { echo json_encode(['success' => false, 'error' => 'Faltan las semifinales']); exit; }
+        $ganadores = $perdedores = [];
+        foreach (['semi1', 'semi2'] as $fase) {
+            $a = (int)$rows[$fase]['clubA']; $b = (int)$rows[$fase]['clubB'];
+            $slots = max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $a)), count(ic_duplas($mysqli2, $idEvento, $idCat, $b))));
+            $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND fase=?");
+            $st->bind_param('iis', $idEvento, $idCat, $fase);
+            $st->execute();
+            $resP = $st->get_result();
+            $ms = [];
+            while ($r = $resP->fetch_assoc()) $ms[] = $r;
+            [, , $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slots);
+            if (!$definida) { echo json_encode(['success' => false, 'error' => "La $fase todavía no está definida"]); exit; }
+            $ganadores[] = $ganador;
+            $perdedores[] = $ganador === $a ? $b : $a;
+        }
+        $st = $mysqli2->prepare("INSERT INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
+        foreach ([['final', $ganadores[0], $ganadores[1]], ['tercer', $perdedores[0], $perdedores[1]]] as [$fase, $ca, $cb]) {
+            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
+            $st->execute();
+        }
+        echo json_encode(['success' => true]);
         exit;
     }
 
@@ -184,21 +307,36 @@ if (isset($_GET['action'])) {
             exit;
         }
 
-        if (!$idCat || !$grupo || !$club1 || !$club2 || in_array('', $cis, true)) {
+        $fase = preg_replace('/[^a-z0-9]/', '', $_GET['fase'] ?? 'grupo');
+        if (!in_array($fase, ['grupo', 'semi1', 'semi2', 'final', 'tercer'], true)) $fase = 'grupo';
+
+        if (!$idCat || !$club1 || !$club2 || in_array('', $cis, true) || ($fase === 'grupo' && !$grupo)) {
             echo json_encode(['success' => false, 'error' => 'Faltan datos del partido']); exit;
         }
-        // Ambos clubes deben estar sorteados en ese grupo
-        $st = $mysqli2->prepare("SELECT COUNT(*) c FROM _ic_sorteo WHERE id_evento=? AND id_categoria=? AND grupo=? AND id_club IN (?,?)");
-        $st->bind_param('iiiii', $idEvento, $idCat, $grupo, $club1, $club2);
-        $st->execute();
-        if ((int)$st->get_result()->fetch_assoc()['c'] !== 2) {
-            echo json_encode(['success' => false, 'error' => 'Los clubes no pertenecen a ese grupo']); exit;
+        if ($fase === 'grupo') {
+            // Ambos clubes deben estar sorteados en ese grupo
+            $st = $mysqli2->prepare("SELECT COUNT(*) c FROM _ic_sorteo WHERE id_evento=? AND id_categoria=? AND grupo=? AND id_club IN (?,?)");
+            $st->bind_param('iiiii', $idEvento, $idCat, $grupo, $club1, $club2);
+            $st->execute();
+            if ((int)$st->get_result()->fetch_assoc()['c'] !== 2) {
+                echo json_encode(['success' => false, 'error' => 'Los clubes no pertenecen a ese grupo']); exit;
+            }
+        } else {
+            // El cruce debe existir en _ic_llaves con esos clubes
+            $grupo = 0;
+            $st = $mysqli2->prepare("SELECT clubA, clubB FROM _ic_llaves WHERE id_evento=? AND id_categoria=? AND fase=? LIMIT 1");
+            $st->bind_param('iis', $idEvento, $idCat, $fase);
+            $st->execute();
+            $ll = $st->get_result()->fetch_assoc();
+            if (!$ll || count(array_intersect([$club1, $club2], [(int)$ll['clubA'], (int)$ll['clubB']])) !== 2) {
+                echo json_encode(['success' => false, 'error' => 'El cruce no corresponde a esa fase']); exit;
+            }
         }
         $st = $mysqli2->prepare(
-            "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, club1, club2, es_desempate,
+            "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, fase, club1, club2, es_desempate,
                 ci1_a, ci1_b, ci2_a, ci2_b, s1c1, s1c2, s2c1, s2c2, s3c1, s3c2)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $st->bind_param('iiiiiissssiiiiii', $idEvento, $idCat, $grupo, $club1, $club2, $esDes,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $st->bind_param('iiisiiissssiiiiii', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $esDes,
             $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b'],
             $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2']);
         $st->execute();
@@ -344,9 +482,71 @@ function leerSets(pref) {
   return {s1c1: v('s1a'), s1c2: v('s1b'), s2c1: v('s2a'), s2c2: v('s2b'), s3c1: v('s3a'), s3c2: v('s3b')};
 }
 
+let DATA = null;
+
+function serieBloque(serie, sid, grupo, fase, titulo) {
+  let badge;
+  if (serie.definida) badge = `<span class="badge ok">Ganó ${esc(serie.ganador === serie.clubA ? serie.nomA : serie.nomB)} ${Math.max(serie.winsA, serie.winsB)}-${Math.min(serie.winsA, serie.winsB)}</span>`;
+  else if (serie.necesita_desempate) badge = `<span class="badge des">Serie ${serie.winsA}-${serie.winsB} → DESEMPATE</span>`;
+  else badge = `<span class="badge pend">Serie ${serie.winsA}-${serie.winsB}</span>`;
+  let h = `<div class="serie"><div class="serie-h"><span class="titulo">${titulo ? `<span style="color:var(--morado);font-size:11px;text-transform:uppercase;margin-right:8px;">${titulo}</span>` : ''}${esc(serie.nomA)} <span style="color:var(--gris);font-size:11px;">VS</span> ${esc(serie.nomB)}</span>${badge}</div>`;
+
+  const dupA = DATA.duplas[serie.clubA] || [], dupB = DATA.duplas[serie.clubB] || [];
+  // Slots regulares
+  for (let i = 0; i < serie.slots; i++) {
+    const m = serie.partidos.filter(x => !x.es_desempate)[i];
+    const pref = `${sid}p${i}`;
+    h += `<div class="partido"><div class="pt">Partido ${i+1} — Dupla ${i+1} vs Dupla ${i+1}</div>`;
+    if (m) {
+      h += renderLados(m, serie);
+      h += setsInputs(pref, m.s);
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar cambios</button>
+            <button class="btn btn-del" onclick="borrar(${m.id})">Borrar</button></div>`;
+    } else if (dupA[i] && dupB[i]) {
+      h += `<div class="lados">
+        <div class="dupla"><div class="club-mini">${esc(serie.nomA)} ${i+1}</div><div>${esc(dupA[i].j1)}</div><div>${esc(dupA[i].j2)}</div></div>
+        <div class="dupla"><div class="club-mini">${esc(serie.nomB)} ${i+1}</div><div>${esc(dupB[i].j1)}</div><div>${esc(dupB[i].j2)}</div></div>
+      </div>`;
+      h += setsInputs(pref);
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {categoria: ${catActual}, grupo: ${grupo}, fase: '${fase}', club1: ${serie.clubA}, club2: ${serie.clubB}, es_desempate: 0,
+        ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'})">Cargar resultado</button></div>`;
+    } else {
+      h += `<div class="msg">Falta la dupla ${i+1} de ${esc(!dupA[i] ? serie.nomA : serie.nomB)}</div>`;
+    }
+    h += `</div>`;
+  }
+  // Desempate
+  const des = serie.partidos.find(x => x.es_desempate);
+  if (des || serie.necesita_desempate) {
+    const pref = `${sid}des`;
+    h += `<div class="partido" style="background:#fbf7ff;"><div class="pt"><span class="des">★ Desempate — dupla mezclada</span></div>`;
+    if (des) {
+      h += renderLados(des, serie);
+      h += setsInputs(pref, des.s);
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${des.id}})">Guardar cambios</button>
+            <button class="btn btn-del" onclick="borrar(${des.id})">Borrar</button></div>`;
+    } else {
+      const selJug = (club, nom, id) => {
+        let o = `<select class="jug" id="${pref}-${id}"><option value="">Jugador de ${esc(nom)}...</option>`;
+        (DATA.jugadores[club] || []).forEach(j => o += `<option value="${esc(j.ci)}">${esc(j.nombre)}</option>`);
+        return o + '</select>';
+      };
+      h += `<div class="lados">
+        <div class="dupla"><div class="club-mini">${esc(serie.nomA)}</div>${selJug(serie.clubA, serie.nomA, 'j1a')}${selJug(serie.clubA, serie.nomA, 'j1b')}</div>
+        <div class="dupla"><div class="club-mini">${esc(serie.nomB)}</div>${selJug(serie.clubB, serie.nomB, 'j2a')}${selJug(serie.clubB, serie.nomB, 'j2b')}</div>
+      </div>`;
+      h += setsInputs(pref);
+      h += `<div class="acc"><button class="btn btn-ok" onclick="guardarDesempate('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB})">Cargar desempate</button></div>`;
+    }
+    h += `</div>`;
+  }
+  return h + `</div>`;
+}
+
 async function cargarEstado() {
   const r = await api({action: 'estado', categoria: catActual});
   if (!r.success) { toast(r.error || 'Error'); return; }
+  DATA = r;
   const box = document.getElementById('contenido');
   box.innerHTML = '';
   r.grupos.forEach(g => {
@@ -356,70 +556,42 @@ async function cargarEstado() {
       h += `<tr><td>${i+1}</td><td class="club">${esc(p.club)}</td><td>${p.sj}</td><td>${p.sg}</td><td>${p.sp}</td><td>${p.pg}</td><td>${p.pp}</td><td>${p.setsF}-${p.setsC}</td><td><b>${p.pts}</b></td></tr>`;
     });
     h += `</table>`;
-
-    g.series.forEach((serie, si) => {
-      const sid = `g${g.grupo}s${si}`;
-      let badge;
-      if (serie.definida) badge = `<span class="badge ok">Ganó ${esc(serie.ganador === serie.clubA ? serie.nomA : serie.nomB)} ${Math.max(serie.winsA, serie.winsB)}-${Math.min(serie.winsA, serie.winsB)}</span>`;
-      else if (serie.necesita_desempate) badge = `<span class="badge des">Serie ${serie.winsA}-${serie.winsB} → DESEMPATE</span>`;
-      else badge = `<span class="badge pend">Serie ${serie.winsA}-${serie.winsB}</span>`;
-      h += `<div class="serie"><div class="serie-h"><span class="titulo">${esc(serie.nomA)} <span style="color:var(--gris);font-size:11px;">VS</span> ${esc(serie.nomB)}</span>${badge}</div>`;
-
-      const dupA = g.duplas[serie.clubA] || [], dupB = g.duplas[serie.clubB] || [];
-      // Slots regulares
-      for (let i = 0; i < serie.slots; i++) {
-        const m = serie.partidos.filter(x => !x.es_desempate)[i];
-        const pref = `${sid}p${i}`;
-        h += `<div class="partido"><div class="pt">Partido ${i+1} — Dupla ${i+1} vs Dupla ${i+1}</div>`;
-        if (m) {
-          h += renderLados(m, serie);
-          h += setsInputs(pref, m.s);
-          h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar cambios</button>
-                <button class="btn btn-del" onclick="borrar(${m.id})">Borrar</button></div>`;
-        } else if (dupA[i] && dupB[i]) {
-          h += `<div class="lados">
-            <div class="dupla"><div class="club-mini">${esc(serie.nomA)} ${i+1}</div><div>${esc(dupA[i].j1)}</div><div>${esc(dupA[i].j2)}</div></div>
-            <div class="dupla"><div class="club-mini">${esc(serie.nomB)} ${i+1}</div><div>${esc(dupB[i].j1)}</div><div>${esc(dupB[i].j2)}</div></div>
-          </div>`;
-          h += setsInputs(pref);
-          h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {categoria: ${catActual}, grupo: ${g.grupo}, club1: ${serie.clubA}, club2: ${serie.clubB}, es_desempate: 0,
-            ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'})">Cargar resultado</button></div>`;
-        } else {
-          h += `<div class="msg">Falta la dupla ${i+1} de ${esc(!dupA[i] ? serie.nomA : serie.nomB)}</div>`;
-        }
-        h += `</div>`;
-      }
-      // Desempate
-      const des = serie.partidos.find(x => x.es_desempate);
-      if (des || serie.necesita_desempate) {
-        const pref = `${sid}des`;
-        h += `<div class="partido" style="background:#fbf7ff;"><div class="pt"><span class="des">★ Desempate — dupla mezclada</span></div>`;
-        if (des) {
-          h += renderLados(des, serie);
-          h += setsInputs(pref, des.s);
-          h += `<div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${des.id}})">Guardar cambios</button>
-                <button class="btn btn-del" onclick="borrar(${des.id})">Borrar</button></div>`;
-        } else {
-          const selJug = (club, nom, id) => {
-            let o = `<select class="jug" id="${pref}-${id}"><option value="">Jugador de ${esc(nom)}...</option>`;
-            (g.jugadores[club] || []).forEach(j => o += `<option value="${esc(j.ci)}">${esc(j.nombre)}</option>`);
-            return o + '</select>';
-          };
-          h += `<div class="lados">
-            <div class="dupla"><div class="club-mini">${esc(serie.nomA)}</div>${selJug(serie.clubA, serie.nomA, 'j1a')}${selJug(serie.clubA, serie.nomA, 'j1b')}</div>
-            <div class="dupla"><div class="club-mini">${esc(serie.nomB)}</div>${selJug(serie.clubB, serie.nomB, 'j2a')}${selJug(serie.clubB, serie.nomB, 'j2b')}</div>
-          </div>`;
-          h += setsInputs(pref);
-          h += `<div class="acc"><button class="btn btn-ok" onclick="guardarDesempate('${pref}', ${catActual}, ${g.grupo}, ${serie.clubA}, ${serie.clubB})">Cargar desempate</button></div>`;
-        }
-        h += `</div>`;
-      }
-      h += `</div>`;
-    });
+    g.series.forEach((serie, si) => { h += serieBloque(serie, `g${g.grupo}s${si}`, g.grupo, 'grupo', ''); });
     if (!g.series.length) h += `<div class="msg">Sin enfrentamientos (faltan clubes en el sorteo)</div>`;
     h += `</div>`;
     box.innerHTML += h;
   });
+
+  // ── Panel de llaves ──
+  let h = `<div class="panel" style="border-color:#d8c7f5;"><h2 style="color:var(--morado);">🏆 Llaves — Semis, Final y 3er Puesto</h2>`;
+  if (r.llaves_generadas) {
+    r.llaves.forEach((serie, si) => { h += serieBloque(serie, `ll${si}`, 0, serie.fase, serie.label); });
+    if (r.puede_generar_final) {
+      h += `<div class="acc"><button class="btn btn-ok" onclick="generarFinal()">Generar Final y 3er Puesto</button></div>`;
+    }
+  } else if (r.puede_generar_llaves) {
+    h += `<div class="msg" style="margin-bottom:10px;">Fase de grupos completa. Se cruzan: 1° Grupo 1 vs 2° Grupo 2 y 1° Grupo 2 vs 2° Grupo 1.</div>
+          <button class="btn btn-ok" onclick="generarLlaves()">Generar semifinales</button>`;
+  } else {
+    h += `<div class="msg">Las llaves se generan cuando todas las series de ambos grupos estén definidas.</div>`;
+  }
+  h += `</div>`;
+  box.innerHTML += h;
+}
+
+async function generarLlaves() {
+  if (!confirm('¿Generar las semifinales desde las posiciones actuales?')) return;
+  const r = await api({action: 'generar_llaves', categoria: catActual});
+  if (!r.success) { toast(r.error || 'Error'); return; }
+  toast('Semifinales generadas ✓');
+  cargarEstado();
+}
+async function generarFinal() {
+  if (!confirm('¿Generar la Final y el 3er Puesto desde las semifinales?')) return;
+  const r = await api({action: 'generar_final', categoria: catActual});
+  if (!r.success) { toast(r.error || 'Error'); return; }
+  toast('Final y 3er puesto generados ✓');
+  cargarEstado();
 }
 
 function renderLados(m, serie) {
@@ -438,11 +610,11 @@ async function guardar(pref, extra) {
   toast('Guardado ✓');
   cargarEstado();
 }
-async function guardarDesempate(pref, cat, grupo, clubA, clubB) {
+async function guardarDesempate(pref, cat, grupo, fase, clubA, clubB) {
   const v = id => document.getElementById(pref + '-' + id).value;
   if (!v('j1a') || !v('j1b') || !v('j2a') || !v('j2b')) { toast('Elegí los 4 jugadores'); return; }
   if (v('j1a') === v('j1b') || v('j2a') === v('j2b')) { toast('Los jugadores de una dupla deben ser distintos'); return; }
-  await guardar(pref, {categoria: cat, grupo, club1: clubA, club2: clubB, es_desempate: 1,
+  await guardar(pref, {categoria: cat, grupo, fase, club1: clubA, club2: clubB, es_desempate: 1,
     ci1_a: v('j1a'), ci1_b: v('j1b'), ci2_a: v('j2a'), ci2_b: v('j2b')});
 }
 async function borrar(id) {
