@@ -60,6 +60,9 @@ club puede quitar parejas hasta el cierre.
   antes del wizard. Verificado: ev15 aviso, ev13 wizard normal intacto.
 - tvt_admin_v2: select "Versión Formulario Inscripción" (fgVersionForm) oculto cuando tipo=5.
 - Backup VPS: inscripcion.php.bak-20260801.
+- Cronograma (commit bf53fb4): la imagen de "Imagen del Programa" (dentro de `descripcion`,
+  extraída con regex src=) se muestra en el aviso de inscripcion.php Y en interclubes.php
+  (arriba del listado de categorías). Verificado con ev15 (programa-interclubes.jpeg).
 
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
