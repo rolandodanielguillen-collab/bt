@@ -64,6 +64,12 @@ club puede quitar parejas hasta el cierre.
   extraída con regex src=) se muestra en el aviso de inscripcion.php Y en interclubes.php
   (arriba del listado de categorías). Verificado con ev15 (programa-interclubes.jpeg).
 
+## UX (commit 1706723)
+- guardarEvento: al CREAR, el modal ya no se cierra — setea evId, pasa a pestaña Categorías
+  (alert guía menciona Clubes si es interclubes). Al EDITAR sigue cerrando como antes.
+- Las categorías de un evento se agregan SOLO en: Eventos → lápiz → pestaña 🏷️ Categorías.
+  La página "Categorías" del menú lateral es solo visualización.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
