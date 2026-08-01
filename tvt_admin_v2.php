@@ -802,7 +802,7 @@ tr:hover td{background:var(--bg-hover)}
       <!-- TAB 2: Configuración -->
       <div id="evTab-2" style="display:none;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-          <div class="fg">
+          <div class="fg" id="fgVersionForm">
             <label class="fl">Versión Formulario Inscripción</label>
             <select class="fs" id="evVersionForm">
               <option value="v2" selected>v2 (actual)</option>
@@ -2650,6 +2650,8 @@ function evTabTotalActual() { return esInterclubes() ? 6 : 5; }
 function toggleTabClubes() {
   const head = document.getElementById('tabClubesHead');
   head.style.display = esInterclubes() ? '' : 'none';
+  // En Interclubes el formulario de inscripción es el de clubes: la versión v1/v2 no aplica
+  document.getElementById('fgVersionForm').style.display = esInterclubes() ? 'none' : '';
   if (!esInterclubes() && evTabActual === 6) switchEvTab(5, null);
 }
 

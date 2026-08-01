@@ -33,7 +33,8 @@ if (!isset($objeto)) $objeto = new principal($mysqli2);
 // ── Cargar datos del evento ───────────────────────────────────────────────────
 $sqlEvento = "SELECT id, codigo_evento, evento, nombre_evento2, fecha, fecha_fin,
               costo1, boton_inscripcion, estado, descripcion, reglamentacion,
-              flyer, flyer2, mapa, id_organizador, base_condiciones, version_formulario
+              flyer, flyer2, mapa, id_organizador, base_condiciones, version_formulario,
+              id_tipo_evento
               FROM _p_eventos
               WHERE (estado='activo' OR estado='registro')
               AND (url_amigable='{$dato}' OR id='{$dato}' OR ($idExtra > 0 AND id={$idExtra}))
@@ -71,6 +72,35 @@ if (!$evento) {
     // URL para el botón "volver" — reconstruye la URL amigable
     $urlAmigable = $evento['url_amigable'] ?? $dato;
     $urlVolver   = 'torneo-' . $urlAmigable . ($idExtra ? '&' . $idExtra : '');
+}
+
+// ── Evento Interclubes: acá no hay inscripción individual ────────────────────
+// La inscripción la hace el dueño de cada club desde su link con token
+// (interclubes.php?token=...). Esta página muestra solo un aviso.
+if ($evento && (int)$evento['id_tipo_evento'] === 5) {
+    $flyerTag = $flyerFile
+        ? '<img src="' . htmlspecialchars($flyerUrl) . '" alt="" style="max-width:100%;border-radius:12px;margin-bottom:18px;">'
+        : '';
+    $sub = $subtituloEvento ? ' · ' . htmlspecialchars($subtituloEvento) : '';
+    echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+       . '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">'
+       . '<title>' . htmlspecialchars($nombreEvento) . ' · Interclubes</title>'
+       . '<link rel="shortcut icon" href="/favicon.ico">'
+       . '<style>body{font-family:\'Segoe UI\',system-ui,sans-serif;background:#f6f1e7;color:#22303c;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}'
+       . '.card{max-width:520px;text-align:center;}'
+       . '.aviso{background:#fff;border:1px solid #e2e6eb;border-radius:14px;padding:26px 22px;}'
+       . '.aviso h1{font-size:21px;margin:0 0 6px;}'
+       . '.aviso .badge{display:inline-block;background:#0b6aa8;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:5px 14px;border-radius:20px;margin-bottom:14px;}'
+       . '.aviso p{font-size:14px;line-height:1.6;color:#5a6570;margin:10px 0 0;}'
+       . '.volver{display:inline-block;margin-top:18px;font-size:13px;color:#0b6aa8;text-decoration:none;font-weight:600;}</style></head>'
+       . '<body><div class="card">' . $flyerTag
+       . '<div class="aviso"><div class="badge">Torneo Interclubes</div>'
+       . '<h1>' . htmlspecialchars($nombreEvento) . $sub . '</h1>'
+       . '<p>En este torneo la inscripción se realiza <strong>por club</strong>: el responsable de cada club inscribe a sus parejas desde el link exclusivo que le envió la organización.</p>'
+       . '<p>Si sos jugador, hablá con el responsable de tu club.<br>Si sos responsable y no tenés tu link, contactá con la organización.</p>'
+       . '<a class="volver" href="https://bt.com.py/">&larr; Volver a bt.com.py</a>'
+       . '</div></div></body></html>';
+    exit;
 }
 
 // PDFs de términos según base_condiciones
