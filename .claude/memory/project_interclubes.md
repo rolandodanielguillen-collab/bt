@@ -165,6 +165,26 @@ Implementación:
   _p_incripciones WHERE id_evento=16; _p_clubes WHERE id_evento=16; _p_usuarios WHERE
   medio='demo-ic'; _relacion_evento_categoria WHERE id_evento=16; _p_eventos id=16.
 
+## Desarrollo estilo TVT + automático + en juego (commit ac036a4, LIVE)
+- PEDIDO del usuario: comportamiento y diseño como todos-vs-todos, pills EN JUEGO,
+  avance automático, y acceso vía botón Llaves desde la página de inscriptos.
+- `interclubes-llaves.php` + `logica/interclubes.llaves.inc.php`: página pública de
+  desarrollo — CSS calcado del TVT (match-card blanco, header #374151 colapsable,
+  resumen ganador + badge FINALIZADO verde, EN JUEGO naranja #EBA652 pulsante),
+  pills de categoría (?categoria=), posiciones por grupo, series de grupos
+  ("G1 · Serie N"), llaves (Semifinal 1/2, Final, 3er Puesto) y 🏆 CAMPEÓN.
+  Slots sin jugar muestran "por jugar" con las duplas.
+- grafico-interclubes (info): botones Información | Llaves arriba (patrón TVT);
+  Llaves aparece solo si `boton_llaves='visible'`. La pestaña llaves anterior fue
+  ELIMINADA de la info (superada). Pestaña Sorteo se mantiene.
+- `ic_autogenerar_llaves()` en interclubes.functions.php: semis (1°G1vs2°G2,
+  1°G2vs2°G1) y final/3er se crean SOLAS (INSERT IGNORE) al completarse
+  grupos/semis; se llama en estado y tras cada guardar_partido. Botones manuales
+  eliminados de la UI (las actions generar_* siguen existiendo, sin uso).
+- `en_juego` en _ic_partidos: acción `en_juego` (toggle por id, o crea fila 0-0
+  en_juego='si' para un slot); guardar resultado la apaga. Admin: botón 🎾 por slot.
+- Verificado con demo ev16: 10 series FINALIZADO, campeón, toggle en juego OK.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
