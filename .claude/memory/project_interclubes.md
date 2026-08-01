@@ -70,6 +70,26 @@ club puede quitar parejas hasta el cierre.
 - Las categorías de un evento se agregan SOLO en: Eventos → lápiz → pestaña 🏷️ Categorías.
   La página "Categorías" del menú lateral es solo visualización.
 
+- Fix 89d21b6: en el form del club, si el CI es de jugador ya registrado (source=usuarios),
+  nombre/apellido/celular quedan readonly (server igual nunca pisa datos de existentes).
+  Si viene del padrón (ci_py): celular editable. Jugador nuevo: todo editable.
+
+- Fix f4a5fc7: CIs del listado de parejas enmascaradas (maskCi: 3 dígitos + asteriscos).
+  Los hidden ci1/ci2 del form quitar siguen completos (necesarios para el DELETE).
+
+## Auto-registro de clubes (commit abdfc1d, LIVE)
+- `interclubes-registro.php?ev=<sha1(id_evento)>` — link ÚNICO por evento para repartir a dueños:
+  form nombre club/responsable/celular/email → INSERT _p_clubes con token propio →
+  redirect a interclubes.php?token=... con flash "guardá esta dirección".
+- Admin: botón "Link de registro" en pestaña Clubes (sha1_evento viene en clubes_evento).
+- Valida: evento tipo 5, estado activo/registro, fecha_fin_inscripcion, nombre duplicado.
+- GOTCHA descubierto: PHP 8.4 mysqli tira excepción con encoding inválido (curl latin1 'ñ'
+  → 500); conexión usa utf8. Fix: try/catch en INSERTs con texto libre (registro + agregar
+  pareja). Navegadores reales mandan UTF-8 y funcionan.
+- GOTCHA infra: hay auto_prepend_file `db/input_sanitizer.php` (bloquea UNION SELECT etc.)
+  y log PHP en /home/bt.com.py/logs/php_log.
+- Evento 15 real: club ARENA BAR (id 3) registrado por el usuario; tests limpiados.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
