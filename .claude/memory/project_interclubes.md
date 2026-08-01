@@ -146,6 +146,25 @@ Implementación:
 - E2E verificado (2 clubes test, serie 1-1, desempate mezclado, posiciones OK, público OK);
   datos de prueba borrados. Audios en BT/ARCHIVOS/1..6.ogg.
 
+## Fase de llaves + DEMO (commit 7da3bba, LIVE)
+- `_ic_llaves` (ev/cat/fase/clubA/clubB, UNIQUE ev+cat+fase) + columna `fase` en _ic_partidos
+  (grupo|semi1|semi2|final|tercer; llaves usan grupo=0).
+- Admin resultados: panel 🏆 Llaves — "Generar semifinales" (habilitado cuando TODAS las
+  series de ambos grupos están definidas; cruces 1°G1vs2°G2 y 1°G2vs2°G1), luego "Generar
+  Final y 3er Puesto" al definirse las semis. Series de llaves = misma mecánica
+  (serieBloque JS reutilizado, duplas + desempate mezclado). estado devuelve duplas/
+  jugadores a nivel categoría (no por grupo).
+- Vista pública: pestaña "Llaves" — VISIBLE SOLO SI `boton_llaves='visible'` en el evento
+  (el switch del admin ahora gobierna esto). Bracket por categoría + badge 🏆 Campeón.
+- EVENTO 16 = DEMO con datos ficticios (estado 'previsualizacion', NO sale en la home):
+  6 clubes (Area 4, Lujini, Vista Bar, Moes-Yoyi, Arena Bar, En lo de Chiqui), 24
+  jugadores ficticios (CIs 9200001-24, medio='demo-ic'), CAT. C - MASC. completa:
+  grupos con desempates → semis → final (CAMPEÓN Area 4) → 3er puesto (Lujini).
+  URL: /grafico-interclubes.php?demo-interclubes&e=<sha1(16)>&evento=<sha1(16)>
+  LIMPIEZA cuando ya no se necesite: DELETE de _ic_partidos/_ic_llaves/_ic_sorteo/
+  _p_incripciones WHERE id_evento=16; _p_clubes WHERE id_evento=16; _p_usuarios WHERE
+  medio='demo-ic'; _relacion_evento_categoria WHERE id_evento=16; _p_eventos id=16.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
