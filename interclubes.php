@@ -67,6 +67,10 @@ function maskPhone($str) {
     $str = preg_replace('/[^0-9]/', '', (string)$str);
     return (strlen($str) <= 4) ? $str : substr($str, 0, 4) . str_repeat('*', strlen($str) - 4);
 }
+function maskCi($ci) {
+    $ci = (string)$ci;
+    return (strlen($ci) <= 3) ? $ci : substr($ci, 0, 3) . str_repeat('*', strlen($ci) - 3);
+}
 
 // ── AJAX: buscar CI (solo con token válido) ──────────────────────────────────
 if (isset($_GET['action']) && $_GET['action'] === 'buscar_ci') {
@@ -380,8 +384,8 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
     <?php foreach ($lp as $p): ?>
     <div class="pareja">
       <div class="nombres">
-        <?= htmlspecialchars(trim($p['j1']) ?: 'CI ' . $p['ci']) ?> <span class="ci-chico">(<?= htmlspecialchars($p['ci']) ?>)</span><br>
-        <?= htmlspecialchars(trim($p['j2']) ?: 'CI ' . $p['ci_dupla']) ?> <span class="ci-chico">(<?= htmlspecialchars($p['ci_dupla']) ?>)</span>
+        <?= htmlspecialchars(trim($p['j1']) ?: 'CI ' . maskCi($p['ci'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci'])) ?>)</span><br>
+        <?= htmlspecialchars(trim($p['j2']) ?: 'CI ' . maskCi($p['ci_dupla'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci_dupla'])) ?>)</span>
       </div>
       <?php if ($abierta): ?>
       <form method="post" onsubmit="return confirm('¿Quitar esta pareja?')">
