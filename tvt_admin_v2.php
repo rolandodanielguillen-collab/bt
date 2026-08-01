@@ -2966,9 +2966,19 @@ async function guardarEvento() {
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Guardar Evento';
 
   if (r.success) {
-    closeModal('modalEvento');
-    alert(r.mensaje || '✓ Operación completada correctamente');
-    loadEventos();
+    const esNuevo = params.action === 'crear_evento';
+    if (esNuevo && r.id) {
+      // Evento recién creado: dejar el modal abierto para cargar categorías (y clubes)
+      document.getElementById('evId').value = r.id;
+      document.getElementById('modalEventoTitle').innerHTML = '<i class="fas fa-edit" style="margin-right:8px;color:var(--accent);"></i>Editar Evento #' + r.id;
+      loadEventos();
+      alert((r.mensaje || '✓ Evento creado') + '\n\nAhora agregá las categorías en la pestaña 🏷️ Categorías' + (esInterclubes() ? ' y los clubes en 🏢 Clubes' : '') + '.');
+      switchEvTab(5, null);
+    } else {
+      closeModal('modalEvento');
+      alert(r.mensaje || '✓ Operación completada correctamente');
+      loadEventos();
+    }
   } else {
     alert('Error: ' + (r.error || 'desconocido'));
   }
