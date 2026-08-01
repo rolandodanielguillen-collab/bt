@@ -187,26 +187,45 @@ if (isset($llaves['final'])) {
 <title><?php echo htmlspecialchars($rowEvento['evento']); ?> · Interclubes - BT.com.py</title>
 <style>
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: hsl(210,20%,97%); color: hsl(220,20%,15%); margin: 0; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 14px 12px 60px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 14px 12px 60px; }
   h2 { font-size: 22px; margin: 14px 0 4px; text-align: center; line-height: 1.3; }
   .sub-ev { text-align: center; font-size: 12px; color: hsl(215,14%,50%); margin-bottom: 14px; }
   .top-btns { display: flex; justify-content: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .top-btns a { text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: 8px; }
   .b-sec { background: #fff; color: #374151; border: 1px solid hsl(214,25%,80%); }
   .b-pri { background: #2563eb; color: #fff; }
-  .cat-pills { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 16px; }
+  .cat-pills { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-bottom: 14px; }
   @media (min-width: 640px) { .cat-pills { grid-template-columns: repeat(5,1fr); } }
   .cat-pills a { text-align: center; font-size: 11px; font-weight: 700; padding: 8px 4px; border-radius: 8px; text-decoration: none;
     background: #fff; color: #374151; border: 1px solid hsl(214,25%,85%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cat-pills a.on { background: #374151; color: #fff; border-color: #374151; }
-  .sec-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: hsl(215,14%,45%); margin: 20px 0 8px; }
-  .campeon { text-align: center; margin: 14px 0; }
-  .campeon span { display: inline-block; background: #facc15; color: #713f12; font-weight: 800; font-size: 14px; padding: 8px 22px; border-radius: 999px; }
-  table.pos { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; border: 1px solid hsl(214,25%,85%); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
-  table.pos th { background: #374151; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 7px 6px; }
-  table.pos td { padding: 7px 6px; text-align: center; border-top: 1px solid hsl(214,25%,90%); }
+  /* Tabs (igual TVT) */
+  .tabs { display: flex; gap: 4px; background: hsl(210,15%,93%); border-radius: 8px; padding: 4px; margin-bottom: 16px; max-width: 400px; }
+  .tab-btn { flex: 1; padding: 8px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;
+    background: transparent; color: hsl(215,14%,50%); transition: all .2s; font-family: inherit; }
+  .tab-btn.active { background: #fff; color: hsl(220,20%,15%); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  /* Grilla de grupos lado a lado (igual TVT) */
+  .groups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; width: 100%; }
+  .group-head { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+  .group-head .gname { font-weight: 700; font-size: 16px; }
+  .btn-clasif { display: inline-flex; align-items: center; gap: 4px; background: none; border: 1px solid hsl(214,25%,75%);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; color: hsl(215,14%,50%); cursor: pointer; font-family: inherit; }
+  /* Modal Clasificación (igual TVT) */
+  .modal-clasif-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5);
+    z-index: 9999; align-items: center; justify-content: center; padding: 16px; }
+  .modal-clasif-overlay.show { display: flex; }
+  .modal-clasif-box { background: #fff; border-radius: 10px; width: 100%; max-width: 440px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+  .modal-clasif-header { background: #374151; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 14px; }
+  .modal-clasif-header button { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+  table.pos { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.pos th { background: hsl(210,15%,95%); color: hsl(215,14%,40%); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 8px 6px; }
+  table.pos td { padding: 8px 6px; text-align: center; border-top: 1px solid hsl(214,25%,90%); }
   table.pos td.club { text-align: left; font-weight: 700; }
   table.pos tr.lider td { background: #ecfdf5; }
+  .campeon { text-align: center; margin: 14px 0; }
+  .campeon span { display: inline-block; background: #facc15; color: #713f12; font-weight: 800; font-size: 14px; padding: 8px 22px; border-radius: 999px; }
   /* Match cards (diseño todos-vs-todos) */
   .match-card { background: #fff; border-radius: 8px; border: 1px solid hsl(214,25%,85%); overflow: hidden; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   .match-card.en-juego { border: 2px solid #EBA652; box-shadow: 0 2px 8px rgba(235,166,82,.3); }
@@ -256,62 +275,113 @@ if (isset($llaves['final'])) {
     <?php endforeach; ?>
   </div>
 
-  <?php if ($campeon): ?>
-    <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
-  <?php endif; ?>
+  <!-- Tabs: Resultados | SF → (igual TVT) -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tabbtn-resultados" onclick="switchTab('resultados')">Resultados</button>
+    <?php if ($llaves): ?>
+    <button class="tab-btn" id="tabbtn-clasificacion" onclick="switchTab('clasificacion')">SF &rarr;</button>
+    <?php endif; ?>
+  </div>
 
-  <?php
-  // ── Llaves primero (si existen) ──
-  $labelsF = ['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2', 'final' => '🏆 Final', 'tercer' => '3er Puesto'];
-  if ($llaves): ?>
-    <div class="sec-title">Llaves — Semis, Final y 3er Puesto</div>
-    <?php foreach ($labelsF as $fase => $lbl):
-        if (!isset($llaves[$fase])) continue;
-        $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
-        echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
-    endforeach;
-  endif;
+  <!-- Tab Resultados: grupos lado a lado -->
+  <div id="tab-resultados" class="tab-content active">
+    <div class="groups-grid">
+      <?php foreach ($grupos as $g => $clubesG):
+          $mapaG = [];
+          foreach ($clubesG as $c) $mapaG[(int)$c['id_club']] = $c['nombre'];
+          $partG = array_values(array_filter($partidos, fn($m) => (int)$m['grupo'] === $g && $m['fase'] === 'grupo'));
+          $ids = array_column($clubesG, 'id_club');
+          $slotsPorCruce = [];
+          for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++)
+              $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] = $slotsCruce((int)$ids[$i], (int)$ids[$j]);
+          $posiciones = ic_posiciones($mapaG, $partG, $slotsPorCruce);
+      ?>
+      <div style="width:100%;">
+        <div class="group-head">
+          <span class="gname">GRUPO <?php echo $g; ?></span>
+          <button class="btn-clasif" onclick="openModalClasif('modal-clasif-<?php echo $g; ?>')">&#9776; Clasificación</button>
+        </div>
+        <?php
+        $nS = 0;
+        for ($i = 0; $i < count($clubesG); $i++) for ($j = $i + 1; $j < count($clubesG); $j++):
+            $a = (int)$clubesG[$i]['id_club']; $b = (int)$clubesG[$j]['id_club'];
+            $k = min($a, $b) . '-' . max($a, $b);
+            $ms = array_values(array_filter($partG, fn($m) =>
+                (min((int)$m['club1'], (int)$m['club2']) . '-' . max((int)$m['club1'], (int)$m['club2'])) === $k));
+            $nS++;
+            echo ic_card_serie("Serie {$nS}", $a, $b, $ms, $slotsPorCruce[$k], $ctx);
+        endfor;
+        ?>
+      </div>
 
-  // ── Grupos ──
-  foreach ($grupos as $g => $clubesG):
-      $mapaG = [];
-      foreach ($clubesG as $c) $mapaG[(int)$c['id_club']] = $c['nombre'];
-      $partG = array_values(array_filter($partidos, fn($m) => (int)$m['grupo'] === $g && $m['fase'] === 'grupo'));
-      $ids = array_column($clubesG, 'id_club');
-      $slotsPorCruce = [];
-      for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++)
-          $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] = $slotsCruce((int)$ids[$i], (int)$ids[$j]);
-      $posiciones = ic_posiciones($mapaG, $partG, $slotsPorCruce);
-  ?>
-    <div class="sec-title">Grupo <?php echo $g; ?> — Posiciones</div>
-    <table class="pos">
-      <tr><th style="text-align:left;">Club</th><th>Series</th><th>Partidos</th><th>Sets</th><th>Pts</th></tr>
-      <?php foreach ($posiciones as $ip => $p): ?>
-      <tr class="<?php echo $ip === 0 && $p['pts'] > 0 ? 'lider' : ''; ?>">
-        <td class="club"><?php echo ($ip + 1) . '. ' . icn($p['club']); ?></td>
-        <td><?php echo $p['sg']; ?>-<?php echo $p['sp']; ?></td>
-        <td><?php echo $p['pg']; ?>-<?php echo $p['pp']; ?></td>
-        <td><?php echo $p['setsF']; ?>-<?php echo $p['setsC']; ?></td>
-        <td><b><?php echo $p['pts']; ?></b></td>
-      </tr>
+      <!-- Modal clasificación -->
+      <div class="modal-clasif-overlay" id="modal-clasif-<?php echo $g; ?>" onclick="if(event.target===this)closeModalClasif('modal-clasif-<?php echo $g; ?>')">
+        <div class="modal-clasif-box">
+          <div class="modal-clasif-header">
+            <span>Clasificación — Grupo <?php echo $g; ?></span>
+            <button onclick="closeModalClasif('modal-clasif-<?php echo $g; ?>')">&times;</button>
+          </div>
+          <table class="pos">
+            <tr><th style="text-align:left;">Club</th><th>Series</th><th>Partidos</th><th>Sets</th><th>Pts</th></tr>
+            <?php foreach ($posiciones as $ip => $p): ?>
+            <tr class="<?php echo $ip === 0 && $p['pts'] > 0 ? 'lider' : ''; ?>">
+              <td class="club"><?php echo ($ip + 1) . '. ' . icn($p['club']); ?></td>
+              <td><?php echo $p['sg']; ?>-<?php echo $p['sp']; ?></td>
+              <td><?php echo $p['pg']; ?>-<?php echo $p['pp']; ?></td>
+              <td><?php echo $p['setsF']; ?>-<?php echo $p['setsC']; ?></td>
+              <td><b><?php echo $p['pts']; ?></b></td>
+            </tr>
+            <?php endforeach; ?>
+          </table>
+        </div>
+      </div>
       <?php endforeach; ?>
-    </table>
-    <?php
-    $nS = 0;
-    for ($i = 0; $i < count($clubesG); $i++) for ($j = $i + 1; $j < count($clubesG); $j++):
-        $a = (int)$clubesG[$i]['id_club']; $b = (int)$clubesG[$j]['id_club'];
-        $k = min($a, $b) . '-' . max($a, $b);
-        $ms = array_values(array_filter($partG, fn($m) =>
-            (min((int)$m['club1'], (int)$m['club2']) . '-' . max((int)$m['club1'], (int)$m['club2'])) === $k));
-        $nS++;
-        echo ic_card_serie("G{$g} · Serie {$nS}", $a, $b, $ms, $slotsPorCruce[$k], $ctx);
-    endfor;
-  endforeach; ?>
+    </div>
+  </div>
+
+  <!-- Tab SF: semis, final y 3er puesto -->
+  <?php if ($llaves): ?>
+  <div id="tab-clasificacion" class="tab-content">
+    <?php if ($campeon): ?>
+      <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
+    <?php endif; ?>
+    <div class="groups-grid">
+      <div style="width:100%;">
+        <?php
+        foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2'] as $fase => $lbl):
+            if (!isset($llaves[$fase])) continue;
+            $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
+            echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+        endforeach;
+        ?>
+      </div>
+      <div style="width:100%;">
+        <?php
+        foreach (['final' => '🏆 Final', 'tercer' => '3er Puesto'] as $fase => $lbl):
+            if (!isset($llaves[$fase])) continue;
+            $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
+            echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+        endforeach;
+        ?>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <?php endif; ?>
 </div>
 <script>
 function toggleMatch(btn) { btn.closest('.match-card').classList.toggle('abierta'); }
+function switchTab(t) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+  const c = document.getElementById('tab-' + t);
+  const b = document.getElementById('tabbtn-' + t);
+  if (c) c.classList.add('active');
+  if (b) b.classList.add('active');
+}
+function openModalClasif(id) { document.getElementById(id).classList.add('show'); }
+function closeModalClasif(id) { document.getElementById(id).classList.remove('show'); }
 function ocultarDiv() { const d = document.getElementById('cargando'); if (d) d.style.display = 'none'; }
 ocultarDiv();
 </script>
