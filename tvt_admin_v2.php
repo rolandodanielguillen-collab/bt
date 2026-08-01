@@ -991,6 +991,7 @@ tr:hover td{background:var(--bg-hover)}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
           <div style="font-size:13px;color:var(--text-muted);">Clubes invitados — cada club recibe su link de inscripción</div>
           <div style="display:flex;gap:8px;">
+            <button class="btn btn-gh btn-sm" onclick="abrirSorteoIC()" title="Pantalla de carga en vivo del sorteo público"><i class="fas fa-shuffle"></i> Sorteo</button>
             <button class="btn btn-gh btn-sm" onclick="copiarLinkRegistro(this)" title="Link único del evento para que los dueños registren su club solos"><i class="fas fa-link"></i> Link de registro</button>
             <button class="btn btn-p btn-sm" onclick="toggleFormClub()"><i class="fas fa-plus"></i> Agregar club</button>
           </div>
@@ -3382,6 +3383,12 @@ async function crearCategoriaNueva() {
 // ═══ TAB 6: CLUBES (INTERCLUBES) ═══
 let _clubesCache = {};
 let _sha1EventoClubes = '';
+
+function abrirSorteoIC() {
+  const idEv = document.getElementById('evId').value;
+  if (!idEv) { alert('Guardá el evento primero'); return; }
+  window.open('/interclubes_sorteo.php?evento=' + idEv, '_blank');
+}
 
 function copiarLinkRegistro(btn) {
   if (!_sha1EventoClubes) { alert('Abrí la pestaña Clubes de un evento guardado primero'); return; }

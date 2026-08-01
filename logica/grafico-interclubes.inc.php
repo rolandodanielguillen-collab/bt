@@ -86,6 +86,23 @@ while ($p = $res->fetch_assoc()) {
     }
 }
 
+// ── Sorteo público (grupos de clubes por categoría) ──────────────────────────
+$sorteoIC = [];   // [nombre_cat => [grupo => [nombres de clubes en orden]]]
+$st = $mysqli2->prepare(
+    "SELECT COALESCE(cat.categoria, 'SIN CATEGORÍA') AS nomcat, s.grupo, cl.nombre AS club
+       FROM _ic_sorteo s
+       JOIN _p_clubes cl ON cl.id = s.id_club
+       LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
+      WHERE s.id_evento = ?
+      ORDER BY cat.categoria ASC, s.grupo ASC, s.posicion ASC");
+$st->bind_param('i', $idEventos);
+$st->execute();
+$res = $st->get_result();
+while ($r = $res->fetch_assoc()) {
+    $sorteoIC[$r['nomcat']][(int)$r['grupo']][] = $r['club'];
+}
+$haySorteo = !empty($sorteoIC);
+
 function ic_nombre($n) {
     if (!mb_check_encoding((string)$n, 'UTF-8')) $n = mb_convert_encoding($n, 'UTF-8', 'ISO-8859-1');
     return htmlspecialchars(mb_strtoupper(trim((string)$n), 'UTF-8'));
@@ -176,8 +193,14 @@ function ic_nombre($n) {
                             INSCRIPTOS
                         </h2>
                         <div class="flex bg-gray-100 rounded-lg p-1">
-                            <button id="pillClubes" onclick="vistaIC('clubes')"
+                            <?php if ($haySorteo): ?>
+                            <button id="pillSorteo" onclick="vistaIC('sorteo')"
                                     class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md bg-blue-600 text-white shadow">
+                                <i class="fa-solid fa-shuffle mr-1"></i> Sorteo
+                            </button>
+                            <?php endif; ?>
+                            <button id="pillClubes" onclick="vistaIC('clubes')"
+                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md <?php echo $haySorteo ? 'text-gray-600 hover:text-gray-900' : 'bg-blue-600 text-white shadow'; ?>">
                                 <i class="fa-solid fa-building mr-1"></i> Por clubes
                             </button>
                             <button id="pillCats" onclick="vistaIC('cats')"
@@ -187,8 +210,52 @@ function ic_nombre($n) {
                         </div>
                     </div>
 
+                    <?php if ($haySorteo): ?>
+                    <!-- ══ VISTA SORTEO (grupos de clubes por categoría) ══ -->
+                    <div id="vistaSorteo" class="space-y-6">
+                        <?php foreach ($sorteoIC as $nomCat => $grupos): ?>
+                        <div>
+                            <h3 class="text-center text-base font-extrabold text-gray-900 uppercase tracking-wide mb-3"><?php echo htmlspecialchars($nomCat); ?></h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <?php foreach ([1, 2] as $g): $clubesG = $grupos[$g] ?? []; ?>
+                                <div class="border border-gray-700 rounded-lg overflow-hidden">
+                                    <div class="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                                        <span class="text-sm font-bold text-white">Grupo <?php echo $g; ?></span>
+                                        <span class="bg-blue-600 text-white text-[.65rem] font-bold px-2 py-0.5 rounded-full"><?php echo count($clubesG); ?> clubes</span>
+                                    </div>
+                                    <div class="bg-gray-900">
+                                        <?php if (!$clubesG): ?>
+                                            <div class="px-3 py-2.5 text-xs italic" style="color:rgba(255,255,255,.35)">Aún sin sortear</div>
+                                        <?php endif; ?>
+                                        <?php foreach ($clubesG as $i => $nomClub): ?>
+                                        <div class="px-3 py-2.5 flex items-center gap-2 <?php echo $i > 0 ? 'border-t border-gray-800' : ''; ?>">
+                                            <span class="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-300 text-[.6rem] font-extrabold flex items-center justify-center flex-shrink-0"><?php echo $i + 1; ?></span>
+                                            <span class="text-[.8rem] font-bold text-slate-100 uppercase truncate"><?php echo ic_nombre($nomClub); ?></span>
+                                        </div>
+                                        <?php endforeach; ?>
+                                        <?php if (count($clubesG) >= 2): ?>
+                                        <div class="border-t border-gray-700 px-3 py-2">
+                                            <div class="text-[.6rem] font-extrabold uppercase tracking-widest text-blue-400 mb-1">Enfrentamientos</div>
+                                            <?php for ($i = 0; $i < count($clubesG); $i++): for ($j = $i + 1; $j < count($clubesG); $j++): ?>
+                                            <div class="text-[.72rem] font-semibold text-slate-200 py-0.5">
+                                                <?php echo ic_nombre($clubesG[$i]); ?>
+                                                <span class="text-[.6rem] font-extrabold px-1.5" style="color:#93c5fd">VS</span>
+                                                <?php echo ic_nombre($clubesG[$j]); ?>
+                                            </div>
+                                            <?php endfor; endfor; ?>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- ══ VISTA POR CLUBES ══ -->
-                    <div id="vistaClubes" class="space-y-3">
+                    <div id="vistaClubes" class="space-y-3" <?php if ($haySorteo) echo 'style="display:none"'; ?>>
                         <?php if (!$clubesIC): ?>
                             <p class="text-sm text-gray-500 italic py-4 text-center">Aún no hay clubes registrados.</p>
                         <?php endif; ?>
@@ -288,14 +355,18 @@ function ic_nombre($n) {
             }
         }
         function vistaIC(cual) {
-            const clubes = cual === 'clubes';
-            document.getElementById('vistaClubes').style.display = clubes ? '' : 'none';
-            document.getElementById('vistaCats').style.display   = clubes ? 'none' : '';
+            const vistas = { sorteo: 'vistaSorteo', clubes: 'vistaClubes', cats: 'vistaCats' };
+            const pills  = { sorteo: 'pillSorteo',  clubes: 'pillClubes', cats: 'pillCats' };
             const on  = ['bg-blue-600','text-white','shadow'];
             const off = ['text-gray-600'];
-            const pC = document.getElementById('pillClubes'), pK = document.getElementById('pillCats');
-            (clubes ? pC : pK).classList.add(...on);    (clubes ? pC : pK).classList.remove(...off);
-            (clubes ? pK : pC).classList.remove(...on); (clubes ? pK : pC).classList.add(...off);
+            for (const k in vistas) {
+                const v = document.getElementById(vistas[k]);
+                const p = document.getElementById(pills[k]);
+                if (!p) continue;
+                if (v) v.style.display = (k === cual) ? '' : 'none';
+                if (k === cual) { p.classList.add(...on); p.classList.remove(...off); }
+                else            { p.classList.remove(...on); p.classList.add(...off); }
+            }
         }
         function ocultarDiv() {
             const div = document.getElementById("cargando");
