@@ -201,6 +201,16 @@ Implementación:
 - 3er Puesto SEPARADO debajo del bracket. Sin sección de detalle duplicada.
 - Si la final no existe aún: card gris "A definir — ganadores de las semis".
 
+## Cargador estilo TVT + dark/light (commit 264b3a7, LIVE)
+- interclubes_resultados.php FRONT reescrito (backend AJAX intacto): mismo layout que
+  la vista pública — pills categorías, tabs "Grupos | SF →", grupos lado a lado con
+  "☰ Clasificación" (modal), bracket con conectores SVG, 3er puesto abajo — pero cada
+  match-card tiene los inputs de sets adentro (cards abiertas por defecto).
+- Tema DARK por defecto + toggle ◐ a light (localStorage `bt-theme`, mismo patrón que
+  cargador.php). Variables CSS :root / [data-theme=light].
+- GOTCHA build: el PHP del archivo contiene '<!DOCTYPE' en el echo de "Sesión requerida"
+  — al concatenar UI, verificar fin '?>' y ausencia de 'cargarCats();', no DOCTYPE.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
