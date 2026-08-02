@@ -251,6 +251,11 @@ if (isset($llaves['final'])) {
   .bracket-conn svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
   .bracket-conn svg line { stroke: hsl(214,25%,75%); stroke-width: 1.5; }
   @media (min-width: 768px) { .bracket-ronda { flex: 0 0 210px; } .bracket-conn { flex: 0 0 28px; } }
+  /* Bracket con cards completas: semis a la izquierda, final a la derecha */
+  .bracket-flex { display: flex; align-items: stretch; min-width: 560px; }
+  .bracket-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+  .bracket-col-body { flex: 1; display: flex; flex-direction: column; justify-content: space-around; position: relative; gap: 28px; }
+  .bracket-col-body .match-card { margin-bottom: 0; }
   /* Match cards (diseño todos-vs-todos) */
   .match-card { background: #fff; border-radius: 8px; border: 1px solid hsl(214,25%,85%); overflow: hidden; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   .match-card.en-juego { border: 2px solid #EBA652; box-shadow: 0 2px 8px rgba(235,166,82,.3); }
@@ -364,89 +369,62 @@ if (isset($llaves['final'])) {
     </div>
   </div>
 
-  <!-- Tab SF: bracket con conectores + 3er puesto abajo -->
-  <?php if ($llaves):
-      // Card compacta del bracket para una fase
-      $bkCard = function ($pf, $fase) use ($llaves, $msDeFase, $slotsCruce, $mapaTodos) {
-          if (!isset($llaves[$fase])) {
-              return "<div class='bracket-card'><div class='bracket-hd bracket-hd-pend'><span class='bk-pf'>{$pf}</span></div>
-                <div class='bracket-row'><span class='bk-na bracket-pend-nm'>A definir</span></div>
-                <div class='bracket-row'><span class='bk-na bracket-pend-nm'>A definir</span></div></div>";
-          }
-          $a = (int)$llaves[$fase]['clubA']; $b = (int)$llaves[$fase]['clubB'];
-          $ms = $msDeFase($fase);
-          [$wA, $wB, $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slotsCruce($a, $b));
-          $ej = false;
-          foreach ($ms as $m) if (($m['en_juego'] ?? 'no') === 'si') $ej = true;
-          $hdClase = $ej ? 'bracket-hd-enjuego' : (!$ms ? 'bracket-hd-pend' : '');
-          $badge   = $definida ? "<span class='bk-badge'>FINALIZADO</span>" : ($ej ? "<span class='bk-badge-ej'>🔴 EN JUEGO</span>" : '');
-          $fila = fn($club, $wins, $win) =>
-              "<div class='bracket-row" . ($win ? ' bracket-row-winner' : '') . "'>
-                 <span class='bk-na'>" . ($win ? '✓ ' : '') . icn($mapaTodos[$club] ?? '') . "</span>
-                 <span class='bk-sc'>" . ($ms ? $wins : '') . "</span></div>";
-          return "<div class='bracket-card" . ($ej ? ' bracket-card-enjuego' : '') . "'>
-            <div class='bracket-hd {$hdClase}'><span class='bk-pf'>{$pf}</span>{$badge}</div>"
-            . $fila($a, $wA, $definida && $ganador === $a)
-            . $fila($b, $wB, $definida && $ganador === $b)
-            . "</div>";
-      };
-  ?>
+  <!-- Tab SF: semis y final (cards completas) con conectores + 3er puesto abajo -->
+  <?php if ($llaves): ?>
   <div id="tab-clasificacion" class="tab-content">
+    <?php if ($campeon): ?>
+      <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
+    <?php endif; ?>
+
     <div class="bracket-wrapper">
-      <div class="bracket-container">
-        <div class="bracket-ronda">
+      <div class="bracket-flex">
+        <div class="bracket-col">
           <div class="bracket-ronda-header">Semifinales</div>
-          <div class="bracket-ronda-body" id="bracket-body-sf">
-            <?php echo $bkCard('SF1', 'semi1') . $bkCard('SF2', 'semi2'); ?>
+          <div class="bracket-col-body" id="bracket-body-sf">
+            <?php
+            foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2'] as $fase => $lbl):
+                if (!isset($llaves[$fase])) continue;
+                $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
+                echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+            endforeach;
+            ?>
           </div>
         </div>
         <div class="bracket-conn" id="bracket-conn-sf-fn"><svg></svg></div>
-        <div class="bracket-ronda">
+        <div class="bracket-col">
           <div class="bracket-ronda-header">Final</div>
-          <div class="bracket-ronda-body" id="bracket-body-fn">
-            <?php echo $bkCard('FINAL', 'final'); ?>
+          <div class="bracket-col-body" id="bracket-body-fn">
+            <?php
+            if (isset($llaves['final'])):
+                $ca = (int)$llaves['final']['clubA']; $cb = (int)$llaves['final']['clubB'];
+                echo ic_card_serie('🏆 Final', $ca, $cb, $msDeFase('final'), $slotsCruce($ca, $cb), $ctx);
+            else: ?>
+              <div class="match-card"><div class="match-header" style="background:#6b7280;"><span class="round">🏆 Final</span>
+                <div class="info"><span class="summary" style="font-style:italic;">A definir — ganadores de las semis</span></div></div></div>
+            <?php endif; ?>
           </div>
         </div>
-        <?php if ($campeon): ?>
-        <div class="bracket-conn" id="bracket-conn-fn-cp"><svg></svg></div>
-        <div class="bracket-ronda">
-          <div class="bracket-ronda-header">Campeón</div>
-          <div class="bracket-ronda-body" id="bracket-body-cp">
-            <div class="bracket-card" style="border-color:#facc15;">
-              <div class="bracket-hd" style="background:#facc15;color:#713f12;"><span class="bk-pf">🏆 CAMPEÓN</span></div>
-              <div class="bracket-row bracket-row-winner"><span class="bk-na" style="font-weight:800;"><?php echo icn($campeon); ?></span></div>
-            </div>
-          </div>
-        </div>
-        <?php endif; ?>
       </div>
     </div>
 
     <!-- 3er puesto, separado y abajo -->
-    <div class="bracket-ronda-header" style="text-align:left;margin-top:8px;">3er Puesto</div>
+    <div class="bracket-ronda-header" style="text-align:left;margin-top:20px;">3er Puesto</div>
     <?php if (isset($llaves['tercer'])):
         $ca = (int)$llaves['tercer']['clubA']; $cb = (int)$llaves['tercer']['clubB'];
         echo ic_card_serie('3er Puesto', $ca, $cb, $msDeFase('tercer'), $slotsCruce($ca, $cb), $ctx);
     else: ?>
       <div style="font-size:12px;color:hsl(215,14%,55%);font-style:italic;">Se define con los perdedores de las semifinales.</div>
     <?php endif; ?>
-
-    <!-- Detalle de las series del bracket -->
-    <div class="bracket-ronda-header" style="text-align:left;margin-top:16px;">Detalle de las series</div>
-    <?php
-    foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2', 'final' => '🏆 Final'] as $fase => $lbl):
-        if (!isset($llaves[$fase])) continue;
-        $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
-        echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
-    endforeach;
-    ?>
   </div>
   <?php endif; ?>
 
   <?php endif; ?>
 </div>
 <script>
-function toggleMatch(btn) { btn.closest('.match-card').classList.toggle('abierta'); }
+function toggleMatch(btn) {
+  btn.closest('.match-card').classList.toggle('abierta');
+  setTimeout(drawBracketLines, 50); // las alturas cambian al desplegar
+}
 function switchTab(t) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
@@ -466,8 +444,8 @@ function drawBracketLines() {
     const fb = document.getElementById('bracket-body-' + ids[0]);
     const tb = document.getElementById('bracket-body-' + ids[1]);
     if (!fb || !tb) return;
-    const fc = fb.querySelectorAll('.bracket-card');
-    const tc = tb.querySelectorAll('.bracket-card');
+    const fc = fb.querySelectorAll('.match-card');
+    const tc = tb.querySelectorAll('.match-card');
     const cr = conn.getBoundingClientRect();
     const ml = (x1, y1, x2, y2) => {
       const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
