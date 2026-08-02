@@ -213,6 +213,21 @@ Implementación:
 - Fix 5d29fad: las series DEFINIDAS se renderizan colapsadas; abiertas solo las
   pendientes (al cargar el último resultado, la card se colapsa sola en el refresh).
 
+## CIERRE DE SESIÓN 2026-08-01 — Sistema COMPLETO y LIVE
+- DEMO (evento 16) ELIMINADO por completo: _ic_partidos/_ic_llaves/_ic_sorteo/
+  inscripciones/clubes/jugadores demo-ic/rec/evento. Tablas _ic_* en cero,
+  listas para el torneo real.
+- Estado productivo: evento 15 "INTERCLUBES MUNICH ULTRA" (activo, tipo 5) con
+  5 clubes reales registrados vía link: ARENA BAR(3), En lo de chiqui Beach(8),
+  Vista Bar(9), Moes-Yoyi(10), Lujini Beach Tennis(13). Sin inscripciones aún.
+- Flujo completo listo: registro de clubes por link → inscripción de parejas por
+  club (tope por categoría) → sorteo público en vivo (2 grupos de 3) → carga de
+  resultados estilo TVT dark/light → posiciones/semis/final/3er automáticos →
+  vista pública Información + Llaves (bracket con conectores).
+- Falta para el torneo real: fecha_fin_inscripcion del ev15 (hoy NULL = sin
+  cierre), repartir link de registro al 6to club (Area 4 en el flyer), crear
+  categorías Senior si aplica, y cargar el sorteo el día del evento.
+
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
   el tab Clubes ya muestra parejas por club.
