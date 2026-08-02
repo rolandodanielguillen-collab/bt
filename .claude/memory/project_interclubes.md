@@ -210,6 +210,8 @@ Implementación:
   cargador.php). Variables CSS :root / [data-theme=light].
 - GOTCHA build: el PHP del archivo contiene '<!DOCTYPE' en el echo de "Sesión requerida"
   — al concatenar UI, verificar fin '?>' y ausencia de 'cargarCats();', no DOCTYPE.
+- Fix 5d29fad: las series DEFINIDAS se renderizan colapsadas; abiertas solo las
+  pendientes (al cargar el último resultado, la card se colapsa sola en el refresh).
 
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
