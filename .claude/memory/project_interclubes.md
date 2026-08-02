@@ -192,13 +192,14 @@ Implementación:
   "Resultados | SF →" — el tab SF contiene semis/final/3er + campeón.
 - La tabla de posiciones ya NO está inline en la página: solo en el modal.
 
-## Bracket con conectores (commit 9a39fe7, LIVE)
-- Tab SF: columnas Semifinales → conector SVG → Final → conector → Campeón
-  (drawBracketLines copiado del TVT; ids bracket-body-sf/fn/cp, conn sf-fn/fn-cp).
-- Cards compactas: header con SF1/SF2/FINAL + badge, fila por club con wins,
-  ganador resaltado (bracket-row-winner), pendientes "A definir" en gris.
-- 3er Puesto SEPARADO debajo del bracket (card detallada) + sección "Detalle de
-  las series" con las match-cards colapsables de semis y final.
+## Bracket con conectores (commits 9a39fe7 + 8f72384, LIVE)
+- Iteración final (pedido usuario): las cards COMPLETAS de siempre (no compactas) —
+  campeón banner arriba, columna Semifinales (2 match-cards con gap 28px +
+  space-around) → conector SVG → columna Final (card centrada verticalmente).
+  drawBracketLines busca '.match-card' y se redibuja al desplegar (toggleMatch),
+  en resize y al entrar al tab. Layout .bracket-flex min-width 560px (scroll en móvil).
+- 3er Puesto SEPARADO debajo del bracket. Sin sección de detalle duplicada.
+- Si la final no existe aún: card gris "A definir — ganadores de las semis".
 
 ## Pendiente
 - Listado imprimible por club/categoría (para llevar al sorteo presencial) — nice to have,
