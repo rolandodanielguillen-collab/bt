@@ -232,16 +232,19 @@ if($_SERVER["REQUEST_METHOD"] == "POST"):
 	if($partido && $partido['grupo'] < 13):
 		$ev_aux=(int)$partido['evento']; $cat_aux=(int)$partido['categoria'];
 		$mysqli2->query("UPDATE tabla_auxiliar SET jugados=0,`g+`=0,`g-`=0,sg=0,ganados=0,puntos=0,la_posicion=0 WHERE id_evento={$ev_aux} AND id_categoria={$cat_aux}");
-		$resAux=$mysqli2->query("SELECT id,ci1_a,ci1_b,ci2_a,ci2_b,grupo,rusultado_equipo1,resultado_equipo2,resultado3_equipo1,resultado3_equipo2 FROM _todosvstodos WHERE evento={$ev_aux} AND categoria={$cat_aux} AND grupo<13 AND (rusultado_equipo1>0 OR resultado_equipo2>0 OR resultado3_equipo1>0 OR resultado3_equipo2>0)");
+		// [FIX 21/07/2026] Incluir set 2 en SELECT, conteo y suma de games (salvaguarda 3 sets en grupos)
+		$resAux=$mysqli2->query("SELECT id,ci1_a,ci1_b,ci2_a,ci2_b,grupo,rusultado_equipo1,resultado_equipo2,resultado2_equipo1,resultado2_equipo2,resultado3_equipo1,resultado3_equipo2 FROM _todosvstodos WHERE evento={$ev_aux} AND categoria={$cat_aux} AND grupo<13 AND (rusultado_equipo1>0 OR resultado_equipo2>0 OR resultado2_equipo1>0 OR resultado2_equipo2>0 OR resultado3_equipo1>0 OR resultado3_equipo2>0)");
 		while($rowAux=$resAux->fetch_assoc()):
 			$idGrpAux=(int)$rowAux['grupo'];
 			$sA=0;$sB=0;
-			$r1a=abs($rowAux['rusultado_equipo1']);$r1b=abs($rowAux['resultado_equipo2']);
+			$r1a=abs($rowAux['rusultado_equipo1']); $r1b=abs($rowAux['resultado_equipo2']);
+			$r2a=abs($rowAux['resultado2_equipo1']);$r2b=abs($rowAux['resultado2_equipo2']);
 			$r3a=abs($rowAux['resultado3_equipo1']);$r3b=abs($rowAux['resultado3_equipo2']);
 			if($r1a>0||$r1b>0){$r1a>$r1b?$sA++:$sB++;}
+			if($r2a>0||$r2b>0){$r2a>$r2b?$sA++:$sB++;}
 			if($r3a>0||$r3b>0){$r3a>$r3b?$sA++:$sB++;}
 			if($sA==$sB) continue;
-			$gA=$r1a+$r3a;$gB=$r1b+$r3b;
+			$gA=$r1a+$r2a+$r3a;$gB=$r1b+$r2b+$r3b;
 			if($sA>$sB){$ganA=$rowAux['ci1_a'];$ganB=$rowAux['ci1_b'];$perA=$rowAux['ci2_a'];$perB=$rowAux['ci2_b'];$tAF=$gA;$tEC=$gB;}
 			else{$ganA=$rowAux['ci2_a'];$ganB=$rowAux['ci2_b'];$perA=$rowAux['ci1_a'];$perB=$rowAux['ci1_b'];$tAF=$gB;$tEC=$gA;}
 			$aFv=$tAF-$tEC;
@@ -950,7 +953,7 @@ td.pts-neg {
 .bracket-row .bk-na { font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bracket-row-winner .bk-na { font-weight:600; }
 .bracket-row .bk-nb { font-size:9px; color:hsl(215,14%,50%); text-transform:uppercase; }
-.bracket-row .bk-sc { font-size:13px; font-weight:600; min-width:16px; text-align:right; flex-shrink:0; }
+.bracket-row .bk-sc { font-size:13px; font-weight:600; min-width:16px; text-align:right; flex-shrink:0; white-space:nowrap; letter-spacing:2px; }
 .bracket-row .bk-sc-win { color:hsl(220,20%,15%); }
 .bracket-row .bk-sc-lose { color:hsl(215,14%,60%); }
 .bracket-ft { padding:3px 8px; font-size:9px; color:hsl(215,14%,55%); }
@@ -2041,16 +2044,21 @@ if(isset($laCategoria)):
 		endif;
 	endif;
 
-	// Score para mostrar
+	// Score para mostrar - [FIX 21/07/2026] mostrar TODOS los sets jugados, no sólo el primero
+	// Antes: cascada elseif que sólo pintaba un set; en partidos a 3 sets el bracket mostraba
+	// "6-2" y marcaba al perdedor de ese set como ganador -> contradicción visual.
 	$scoreShowA='-';$scoreShowB='-';
 	if($esByeBye):
 		$scoreShowA=$ganaA?'1':'0'; $scoreShowB=$ganaA?'0':'1';
-	elseif($bp['r11']>0||$bp['r12']>0):
-		$scoreShowA=$bp['r11'];$scoreShowB=$bp['r12'];
-	elseif($bp['r21']>0||$bp['r22']>0):
-		$scoreShowA=$bp['r21'];$scoreShowB=$bp['r22'];
-	elseif($bp['r31']>0||$bp['r32']>0):
-		$scoreShowA=$bp['r31'];$scoreShowB=$bp['r32'];
+	else:
+		$setsBk=[];
+		if($bp['r11']>0||$bp['r12']>0) $setsBk[]=[$bp['r11'],$bp['r12']];
+		if($bp['r21']>0||$bp['r22']>0) $setsBk[]=[$bp['r21'],$bp['r22']];
+		if($bp['r31']>0||$bp['r32']>0) $setsBk[]=[$bp['r31'],$bp['r32']];
+		if(!empty($setsBk)):
+			$scoreShowA=implode(' ',array_column($setsBk,0));
+			$scoreShowB=implode(' ',array_column($setsBk,1));
+		endif;
 	endif;
 	$prefijoBk=$datosFase['prefijo'];if($idFase!=18&&$idFase!=19)$prefijoBk.=$bp['partidoNro'];
 	if($bp['ci1_a']>0):$j1=strip_tags(user_ci2($bp['ci1_a']));$j1b=($bp['ci1_b']>0)?strip_tags(user_ci2($bp['ci1_b'])):'';
@@ -2062,7 +2070,13 @@ if(isset($laCategoria)):
 	elseif($bp['ref_etiqueta2']>0):$rGb=$mysqli2->query("SELECT grupo FROM _p_grupos WHERE id={$bp['ref_etiqueta2']}");$rGbr=$rGb->fetch_assoc();$rRefb=$mysqli2->query("SELECT referencia FROM _referencia_etiquetas WHERE id={$bp['ref_tipo_regustado2']}");$rRefbr=$rRefb->fetch_assoc();$j2=$rRefbr['referencia'].' '.$rGbr['grupo'];$j2b='';
 	else:$j2='?';$j2b='';endif;
 	$resumenBk='Pendiente';
-	if($hayGanador):$nomGan=$ganaA?explode("\n",$j1)[0]:explode("\n",$j2)[0];$sgH=$ganaA?$scoreShowA:$scoreShowB;$spH=$ganaA?$scoreShowB:$scoreShowA;$resumenBk=mb_substr(trim($nomGan),0,10,'UTF-8')." ({$sgH}-{$spH})";endif;
+	if($hayGanador):
+		$nomGan=$ganaA?explode("\n",$j1)[0]:explode("\n",$j2)[0];
+		// [FIX 21/07/2026] Resumen del header en conteo de sets (2-1, 2-0) — más legible que "6 4 8-2 6 10"
+		$sgH=$ganaA?$sA:$sB; $spH=$ganaA?$sB:$sA;
+		if($esByeBye){ $sgH=1; $spH=0; }
+		$resumenBk=mb_substr(trim($nomGan),0,10,'UTF-8')." ({$sgH}-{$spH})";
+	endif;
 	$cardClass='bracket-card';$hdClass='bracket-hd';$badgeHtml='';
 	if($bp['en_juego']=='si'):$cardClass.=' bracket-card-enjuego';$hdClass.=' bracket-hd-enjuego';$badgeHtml="<span class='bk-badge-ej'>EN JUEGO</span>";
 	elseif($hayGanador):$badgeHtml="<span class='bk-badge'>FIN</span>";
