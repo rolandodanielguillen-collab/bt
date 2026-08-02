@@ -639,7 +639,8 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
   } else {
     summary = 'A continuación' + (enJuego ? ' 🔴 EN JUEGO' : '');
   }
-  let h = `<div class="match-card abierta${enJuego ? ' en-juego' : ''}">
+  // Serie definida → colapsada; quedan abiertas solo las que faltan cargar
+  let h = `<div class="match-card${serie.definida ? '' : ' abierta'}${enJuego ? ' en-juego' : ''}">
     <button class="match-header" onclick="toggleMatch(this)">
       <span class="round">${titulo}</span>
       <div class="info"><span class="summary">${UP(serie.nomA)} vs ${UP(serie.nomB)} — ${summary}</span>${badge}</div>
