@@ -226,6 +226,31 @@ if (isset($llaves['final'])) {
   table.pos tr.lider td { background: #ecfdf5; }
   .campeon { text-align: center; margin: 14px 0; }
   .campeon span { display: inline-block; background: #facc15; color: #713f12; font-weight: 800; font-size: 14px; padding: 8px 22px; border-radius: 999px; }
+  /* Bracket eliminatorio (igual TVT) */
+  .bracket-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px; }
+  .bracket-container { display: flex; align-items: stretch; min-width: max-content; gap: 0; }
+  .bracket-ronda { flex: 0 0 165px; display: flex; flex-direction: column; }
+  .bracket-ronda-header { text-align: center; font-size: 11px; font-weight: 600; color: hsl(215,14%,50%); text-transform: uppercase; letter-spacing: .05em; padding: 6px 0 10px; white-space: nowrap; }
+  .bracket-ronda-body { display: flex; flex-direction: column; justify-content: space-around; flex: 1; position: relative; }
+  .bracket-card { background: #fff; border-radius: 6px; border: 1px solid hsl(214,25%,85%); overflow: hidden; margin: 4px 3px; position: relative; z-index: 1; }
+  .bracket-card-enjuego { border: 2px solid #EBA652; }
+  .bracket-hd { background: #374151; color: #fff; padding: 4px 8px; font-size: 11px; display: flex; align-items: center; gap: 6px; }
+  .bracket-hd-enjuego { background: #EBA652; }
+  .bracket-hd-pend { background: #6b7280; }
+  .bracket-hd .bk-pf { font-weight: 600; }
+  .bracket-hd .bk-badge { font-size: 8px; letter-spacing: .05em; color: #86efac; }
+  .bracket-hd .bk-badge-ej { font-size: 8px; letter-spacing: .05em; color: #fff; }
+  .bracket-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid hsl(214,25%,90%); font-size: 11px; line-height: 1.25; }
+  .bracket-row:last-of-type { border-bottom: none; }
+  .bracket-row-winner { background: #e8f4f8; }
+  .bracket-row .bk-na { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bracket-row-winner .bk-na { font-weight: 700; }
+  .bracket-row .bk-sc { font-size: 13px; font-weight: 700; min-width: 16px; text-align: right; flex-shrink: 0; }
+  .bracket-pend-nm { font-style: italic; color: hsl(215,14%,60%); }
+  .bracket-conn { flex: 0 0 20px; position: relative; }
+  .bracket-conn svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  .bracket-conn svg line { stroke: hsl(214,25%,75%); stroke-width: 1.5; }
+  @media (min-width: 768px) { .bracket-ronda { flex: 0 0 210px; } .bracket-conn { flex: 0 0 28px; } }
   /* Match cards (diseño todos-vs-todos) */
   .match-card { background: #fff; border-radius: 8px; border: 1px solid hsl(214,25%,85%); overflow: hidden; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   .match-card.en-juego { border: 2px solid #EBA652; box-shadow: 0 2px 8px rgba(235,166,82,.3); }
@@ -339,32 +364,82 @@ if (isset($llaves['final'])) {
     </div>
   </div>
 
-  <!-- Tab SF: semis, final y 3er puesto -->
-  <?php if ($llaves): ?>
+  <!-- Tab SF: bracket con conectores + 3er puesto abajo -->
+  <?php if ($llaves):
+      // Card compacta del bracket para una fase
+      $bkCard = function ($pf, $fase) use ($llaves, $msDeFase, $slotsCruce, $mapaTodos) {
+          if (!isset($llaves[$fase])) {
+              return "<div class='bracket-card'><div class='bracket-hd bracket-hd-pend'><span class='bk-pf'>{$pf}</span></div>
+                <div class='bracket-row'><span class='bk-na bracket-pend-nm'>A definir</span></div>
+                <div class='bracket-row'><span class='bk-na bracket-pend-nm'>A definir</span></div></div>";
+          }
+          $a = (int)$llaves[$fase]['clubA']; $b = (int)$llaves[$fase]['clubB'];
+          $ms = $msDeFase($fase);
+          [$wA, $wB, $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slotsCruce($a, $b));
+          $ej = false;
+          foreach ($ms as $m) if (($m['en_juego'] ?? 'no') === 'si') $ej = true;
+          $hdClase = $ej ? 'bracket-hd-enjuego' : (!$ms ? 'bracket-hd-pend' : '');
+          $badge   = $definida ? "<span class='bk-badge'>FINALIZADO</span>" : ($ej ? "<span class='bk-badge-ej'>🔴 EN JUEGO</span>" : '');
+          $fila = fn($club, $wins, $win) =>
+              "<div class='bracket-row" . ($win ? ' bracket-row-winner' : '') . "'>
+                 <span class='bk-na'>" . ($win ? '✓ ' : '') . icn($mapaTodos[$club] ?? '') . "</span>
+                 <span class='bk-sc'>" . ($ms ? $wins : '') . "</span></div>";
+          return "<div class='bracket-card" . ($ej ? ' bracket-card-enjuego' : '') . "'>
+            <div class='bracket-hd {$hdClase}'><span class='bk-pf'>{$pf}</span>{$badge}</div>"
+            . $fila($a, $wA, $definida && $ganador === $a)
+            . $fila($b, $wB, $definida && $ganador === $b)
+            . "</div>";
+      };
+  ?>
   <div id="tab-clasificacion" class="tab-content">
-    <?php if ($campeon): ?>
-      <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
-    <?php endif; ?>
-    <div class="groups-grid">
-      <div style="width:100%;">
-        <?php
-        foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2'] as $fase => $lbl):
-            if (!isset($llaves[$fase])) continue;
-            $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
-            echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
-        endforeach;
-        ?>
-      </div>
-      <div style="width:100%;">
-        <?php
-        foreach (['final' => '🏆 Final', 'tercer' => '3er Puesto'] as $fase => $lbl):
-            if (!isset($llaves[$fase])) continue;
-            $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
-            echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
-        endforeach;
-        ?>
+    <div class="bracket-wrapper">
+      <div class="bracket-container">
+        <div class="bracket-ronda">
+          <div class="bracket-ronda-header">Semifinales</div>
+          <div class="bracket-ronda-body" id="bracket-body-sf">
+            <?php echo $bkCard('SF1', 'semi1') . $bkCard('SF2', 'semi2'); ?>
+          </div>
+        </div>
+        <div class="bracket-conn" id="bracket-conn-sf-fn"><svg></svg></div>
+        <div class="bracket-ronda">
+          <div class="bracket-ronda-header">Final</div>
+          <div class="bracket-ronda-body" id="bracket-body-fn">
+            <?php echo $bkCard('FINAL', 'final'); ?>
+          </div>
+        </div>
+        <?php if ($campeon): ?>
+        <div class="bracket-conn" id="bracket-conn-fn-cp"><svg></svg></div>
+        <div class="bracket-ronda">
+          <div class="bracket-ronda-header">Campeón</div>
+          <div class="bracket-ronda-body" id="bracket-body-cp">
+            <div class="bracket-card" style="border-color:#facc15;">
+              <div class="bracket-hd" style="background:#facc15;color:#713f12;"><span class="bk-pf">🏆 CAMPEÓN</span></div>
+              <div class="bracket-row bracket-row-winner"><span class="bk-na" style="font-weight:800;"><?php echo icn($campeon); ?></span></div>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
       </div>
     </div>
+
+    <!-- 3er puesto, separado y abajo -->
+    <div class="bracket-ronda-header" style="text-align:left;margin-top:8px;">3er Puesto</div>
+    <?php if (isset($llaves['tercer'])):
+        $ca = (int)$llaves['tercer']['clubA']; $cb = (int)$llaves['tercer']['clubB'];
+        echo ic_card_serie('3er Puesto', $ca, $cb, $msDeFase('tercer'), $slotsCruce($ca, $cb), $ctx);
+    else: ?>
+      <div style="font-size:12px;color:hsl(215,14%,55%);font-style:italic;">Se define con los perdedores de las semifinales.</div>
+    <?php endif; ?>
+
+    <!-- Detalle de las series del bracket -->
+    <div class="bracket-ronda-header" style="text-align:left;margin-top:16px;">Detalle de las series</div>
+    <?php
+    foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2', 'final' => '🏆 Final'] as $fase => $lbl):
+        if (!isset($llaves[$fase])) continue;
+        $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
+        echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+    endforeach;
+    ?>
   </div>
   <?php endif; ?>
 
@@ -379,7 +454,41 @@ function switchTab(t) {
   const b = document.getElementById('tabbtn-' + t);
   if (c) c.classList.add('active');
   if (b) b.classList.add('active');
+  if (t === 'clasificacion') setTimeout(drawBracketLines, 100);
 }
+// Conectores del bracket (igual TVT): líneas SVG entre columnas
+function drawBracketLines() {
+  document.querySelectorAll('.bracket-conn').forEach(function (conn) {
+    const svg = conn.querySelector('svg');
+    if (!svg) return;
+    svg.innerHTML = '';
+    const ids = conn.id.replace('bracket-conn-', '').split('-');
+    const fb = document.getElementById('bracket-body-' + ids[0]);
+    const tb = document.getElementById('bracket-body-' + ids[1]);
+    if (!fb || !tb) return;
+    const fc = fb.querySelectorAll('.bracket-card');
+    const tc = tb.querySelectorAll('.bracket-card');
+    const cr = conn.getBoundingClientRect();
+    const ml = (x1, y1, x2, y2) => {
+      const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+      l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      svg.appendChild(l);
+    };
+    if (fc.length >= 2 && tc.length >= 1) {
+      const r1 = fc[0].getBoundingClientRect(), r2 = fc[1].getBoundingClientRect(), rt = tc[0].getBoundingClientRect();
+      const y1 = Math.round(r1.top + r1.height / 2 - cr.top);
+      const y2 = Math.round(r2.top + r2.height / 2 - cr.top);
+      const yt = Math.round(rt.top + rt.height / 2 - cr.top);
+      const w = cr.width, mx = Math.round(w / 2);
+      ml(0, y1, mx, y1); ml(0, y2, mx, y2); ml(mx, y1, mx, y2); ml(mx, yt, w, yt);
+    } else if (fc.length === 1 && tc.length === 1) {
+      const rs = fc[0].getBoundingClientRect(), rt = tc[0].getBoundingClientRect();
+      ml(0, Math.round(rs.top + rs.height / 2 - cr.top), cr.width, Math.round(rt.top + rt.height / 2 - cr.top));
+    }
+  });
+}
+window.addEventListener('resize', drawBracketLines);
 function openModalClasif(id) { document.getElementById(id).classList.add('show'); }
 function closeModalClasif(id) { document.getElementById(id).classList.remove('show'); }
 function ocultarDiv() { const d = document.getElementById('cargando'); if (d) d.style.display = 'none'; }
