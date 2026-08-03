@@ -1,5 +1,13 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## CIERRE 2026-08-03 — probado y aprobado por el usuario
+Badges PAREJA 1/2, definidor del 3er partido, edición de inscripciones con
+torneo iniciado y bracket placeholder (público + admin): TODO LIVE, probado
+por el usuario en el demo. Proyecto BT cerrado por ahora.
+PENDIENTE al retomar: borrar el DEMO evento 16 cuando ya no haga falta
+(SQL de limpieza abajo, sección DEMO); ev15 real sigue sin fecha_fin_inscripcion
+y sin el 6to club (Area 4).
+
 ## Badges + definidor desempate + edición inscripciones (2026-08-03, LIVE, commits f1..88d7eaa)
 - F1 badges: pills PAREJA N (slot) / MIXTA (CIs vs ic_duplas) en cargador admin
   (filaPartido/badgeDes) y vista pública (ic_fila_partido/ic_badge_pareja). CSS .pj-badge.
