@@ -1940,7 +1940,115 @@ if ($action === 'club_inscriptos') {
         $row['jugador2'] = $r2 ? $r2['n'] : '';
         $filas[] = $row;
     }
-    resp(['success' => true, 'parejas' => $filas]);
+    // Suplentes del club (por categoría)
+    $st = $mysqli2->prepare(
+        "SELECT s.id_categoria, COALESCE(cat.categoria,'?') AS categoria, s.ci,
+                TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS jugador
+           FROM _ic_suplentes s
+           LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
+           LEFT JOIN _p_usuarios u ON TRIM(u.ci) = TRIM(s.ci)
+          WHERE s.id_club = ?");
+    $st->bind_param('i', $idClub);
+    $st->execute();
+    $res = $st->get_result();
+    $sup = [];
+    while ($row = $res->fetch_assoc()) $sup[] = $row;
+    resp(['success' => true, 'parejas' => $filas, 'suplentes' => $sup]);
+}
+
+// ACTION: editar_jugador_pareja — Reemplaza un jugador de una pareja (torneo iniciado)
+// Actualiza las DOS filas espejo (a,b) y (b,a). Los partidos ya cargados conservan
+// sus CIs históricos; los próximos usan la dupla nueva (ic_duplas lee inscripciones).
+if ($action === 'editar_jugador_pareja') {
+    $idClub  = intGet('id_club');
+    $idCat   = intGet('id_categoria');
+    $limpiar = fn($k) => ltrim(preg_replace('/[^0-9]/', '', strGet($k)), '0');
+    $ciViejo = $limpiar('ci_viejo');
+    $ciComp  = $limpiar('ci_companero');
+    $ciNuevo = $limpiar('ci_nuevo');
+    if (!$idClub || !$idCat || $ciViejo === '' || $ciComp === '' || $ciNuevo === '') respErr('Faltan datos');
+    if ((int)$ciNuevo < 100000) respErr('Cédula nueva inválida');
+    if ($ciNuevo === $ciComp) respErr('El nuevo jugador no puede ser el compañero de la pareja');
+    if ($ciNuevo === $ciViejo) respErr('El CI nuevo es igual al actual');
+
+    $st = $mysqli2->prepare("SELECT id_evento FROM _p_clubes WHERE id = ? LIMIT 1");
+    $st->bind_param('i', $idClub);
+    $st->execute();
+    $club = $st->get_result()->fetch_assoc();
+    if (!$club) respErr('Club no encontrado');
+    $idEvento = (int)$club['id_evento'];
+
+    // La pareja debe existir con sus dos filas espejo
+    $st = $mysqli2->prepare(
+        "SELECT COUNT(*) AS c FROM _p_incripciones
+          WHERE id_club = ? AND id_evento = ? AND id_categoria = ? AND estado <> 'bloqueado'
+            AND ((ci = ? AND ci_dupla = ?) OR (ci = ? AND ci_dupla = ?))");
+    $st->bind_param('iiissss', $idClub, $idEvento, $idCat, $ciViejo, $ciComp, $ciComp, $ciViejo);
+    $st->execute();
+    if ((int)$st->get_result()->fetch_assoc()['c'] !== 2) respErr('No se encontró la pareja (o le falta la fila espejo)');
+
+    // El nuevo jugador no puede estar ya inscripto en la categoría (cualquier club)
+    $st = $mysqli2->prepare(
+        "SELECT id FROM _p_incripciones
+          WHERE ci = ? AND id_categoria = ? AND id_evento = ? AND estado <> 'bloqueado' LIMIT 1");
+    $st->bind_param('sii', $ciNuevo, $idCat, $idEvento);
+    $st->execute();
+    if ($st->get_result()->num_rows > 0) respErr('Ese jugador ya está inscripto en esa categoría');
+
+    // ¿Es suplente? De otro club: bloquea. Del mismo club: se promueve (sale de suplentes)
+    $st = $mysqli2->prepare("SELECT id, id_club FROM _ic_suplentes WHERE id_evento = ? AND id_categoria = ? AND ci = ? LIMIT 1");
+    $st->bind_param('iis', $idEvento, $idCat, $ciNuevo);
+    $st->execute();
+    $supRow = $st->get_result()->fetch_assoc();
+    if ($supRow && (int)$supRow['id_club'] !== $idClub) respErr('Ese jugador es suplente de otro club en esa categoría');
+
+    // Asegurar que el jugador exista en _p_usuarios (padrón pisa lo tipeado; si no hay datos, pedirlos)
+    $st = $mysqli2->prepare("SELECT id FROM _p_usuarios WHERE TRIM(ci) = ? LIMIT 1");
+    $st->bind_param('s', $ciNuevo);
+    $st->execute();
+    if ($st->get_result()->num_rows === 0) {
+        $nombre   = trim(strip_tags(strGet('nombre')));
+        $apellido = trim(strip_tags(strGet('apellido')));
+        $cel      = preg_replace('/[^0-9]/', '', strGet('cel'));
+        $st = $mysqli2->prepare("SELECT nombre, apellido FROM _ci_py WHERE ci = ? LIMIT 1");
+        $st->bind_param('s', $ciNuevo);
+        $st->execute();
+        if ($p = $st->get_result()->fetch_assoc()) { $nombre = $p['nombre']; $apellido = $p['apellido']; }
+        if ($nombre === '' || $apellido === '') resp(['success' => false, 'need_datos' => true, 'error' => 'Jugador nuevo: faltan nombre y apellido']);
+        $st = $mysqli2->prepare("SELECT sexo FROM _relacion_evento_categoria WHERE id_evento = ? AND id_categoria = ? LIMIT 1");
+        $st->bind_param('ii', $idEvento, $idCat);
+        $st->execute();
+        $sexoCat = $st->get_result()->fetch_assoc()['sexo'] ?? '';
+        $sexo = in_array($sexoCat, ['hombre', 'mujer'], true) ? $sexoCat : null;
+        $st = $mysqli2->prepare(
+            "INSERT INTO _p_usuarios (nombre, apellido, cel, ci, sexo, tipo_documento, registro, tipo, medio)
+             VALUES (?,?,?,?,?, 'CI', 'inscripcion', 'jugador', 'interclubes')");
+        $st->bind_param('sssss', $nombre, $apellido, $cel, $ciNuevo, $sexo);
+        if (!$st->execute()) respErr('Error al registrar al jugador nuevo');
+    }
+
+    // Actualizar las dos filas espejo
+    $st = $mysqli2->prepare(
+        "UPDATE _p_incripciones SET ci = ?
+          WHERE id_club = ? AND id_evento = ? AND id_categoria = ? AND ci = ? AND ci_dupla = ? LIMIT 1");
+    $st->bind_param('siiiss', $ciNuevo, $idClub, $idEvento, $idCat, $ciViejo, $ciComp);
+    $st->execute();
+    $ok1 = $st->affected_rows > 0;
+    $st = $mysqli2->prepare(
+        "UPDATE _p_incripciones SET ci_dupla = ?
+          WHERE id_club = ? AND id_evento = ? AND id_categoria = ? AND ci = ? AND ci_dupla = ? LIMIT 1");
+    $st->bind_param('siiiss', $ciNuevo, $idClub, $idEvento, $idCat, $ciComp, $ciViejo);
+    $st->execute();
+    $ok2 = $st->affected_rows > 0;
+    if (!$ok1 || !$ok2) respErr('La pareja quedó a medias: revisá las filas espejo de ' . $ciViejo . '/' . $ciComp);
+
+    // Promoción de suplente del mismo club
+    if ($supRow && (int)$supRow['id_club'] === $idClub) {
+        $st = $mysqli2->prepare("DELETE FROM _ic_suplentes WHERE id = ? LIMIT 1");
+        $st->bind_param('i', $supRow['id']);
+        $st->execute();
+    }
+    resp(['success' => true, 'mensaje' => 'Jugador reemplazado']);
 }
 
 // ── Si ninguna acción coincidió ──

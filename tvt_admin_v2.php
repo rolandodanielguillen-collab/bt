@@ -3530,6 +3530,8 @@ async function eliminarClub(idClub) {
   else alert('Error: ' + (r.error || 'desconocido'));
 }
 
+let _supCache = {};  // idClub → suplentes [{id_categoria, categoria, ci, jugador}]
+
 async function verParejasClub(idClub) {
   const nombre = (_clubesCache[idClub] || {}).nombre || '';
   const row = document.getElementById('club-parejas-' + idClub);
@@ -3539,17 +3541,55 @@ async function verParejasClub(idClub) {
   cell.innerHTML = '<div class="loading" style="min-height:40px;border-radius:8px;"></div>';
   const r = await api({action: 'club_inscriptos', id_club: idClub});
   if (!r.success) { cell.innerHTML = 'Error al cargar'; return; }
-  if (!r.parejas.length) { cell.innerHTML = `<em style="color:var(--text-muted);">Sin parejas inscriptas de ${nombre}</em>`; return; }
+  _supCache[idClub] = r.suplentes || [];
+  if (!r.parejas.length && !_supCache[idClub].length) { cell.innerHTML = `<em style="color:var(--text-muted);">Sin parejas inscriptas de ${nombre}</em>`; return; }
+  const lapiz = (ciViejo, ciComp, idCat, nom) =>
+    `<button class="btn btn-gh btn-sm" title="Reemplazar jugador" style="padding:0 5px;font-size:9px;" onclick="editarJugadorPareja(${idClub}, ${idCat}, '${ciViejo}', '${ciComp}', '${String(nom).replace(/['"\\\\]/g, '')}')"><i class="fas fa-pen"></i></button>`;
   let h = '';
-  let catActual = null;
+  let catActual = null, nP = 0;
   r.parejas.forEach(p => {
     if (p.categoria !== catActual) {
       catActual = p.categoria;
+      nP = 0;
       h += `<div style="font-weight:700;font-size:11px;text-transform:uppercase;color:var(--accent);margin:8px 0 4px;">${p.categoria || 'Sin categoría'}</div>`;
     }
-    h += `<div style="padding:3px 0;font-size:12px;">• ${p.jugador || p.ci} <span style="color:var(--text-muted);">(${p.ci})</span> / ${p.jugador2 || p.ci_dupla} <span style="color:var(--text-muted);">(${p.ci_dupla})</span></div>`;
+    nP++;
+    h += `<div style="padding:3px 0;font-size:12px;"><span style="color:var(--accent);font-weight:700;font-size:10px;">P${nP}</span>
+      ${p.jugador || p.ci} <span style="color:var(--text-muted);">(${p.ci})</span> ${lapiz(p.ci, p.ci_dupla, p.id_categoria, p.jugador || p.ci)}
+      / ${p.jugador2 || p.ci_dupla} <span style="color:var(--text-muted);">(${p.ci_dupla})</span> ${lapiz(p.ci_dupla, p.ci, p.id_categoria, p.jugador2 || p.ci_dupla)}</div>`;
   });
+  if (_supCache[idClub].length) {
+    h += `<div style="font-weight:700;font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:8px 0 4px;">Suplentes</div>`;
+    _supCache[idClub].forEach(s => {
+      h += `<div style="padding:2px 0;font-size:12px;color:var(--text-muted);">• ${s.categoria}: ${s.jugador || s.ci} (${s.ci})</div>`;
+    });
+  }
   cell.innerHTML = h;
+}
+
+// Reemplazo de un jugador de la pareja (torneo iniciado): atajo suplente o CI a mano.
+// Los partidos ya jugados conservan sus CIs; los próximos usan la dupla nueva.
+async function editarJugadorPareja(idClub, idCat, ciViejo, ciComp, nombreViejo) {
+  const sups = (_supCache[idClub] || []).filter(s => parseInt(s.id_categoria) === idCat);
+  let ciNuevo = '';
+  if (sups.length && confirm(`¿Reemplazar a ${nombreViejo} por el suplente ${sups[0].jugador || sups[0].ci}?\n(Cancelar para tipear otro CI)`)) {
+    ciNuevo = sups[0].ci;
+  } else {
+    ciNuevo = prompt(`CI del jugador que reemplaza a ${nombreViejo}:`);
+    if (!ciNuevo) return;
+  }
+  let r = await api({action: 'editar_jugador_pareja', id_club: idClub, id_categoria: idCat,
+    ci_viejo: ciViejo, ci_companero: ciComp, ci_nuevo: ciNuevo});
+  if (!r.success && r.need_datos) {
+    const nom = prompt('Jugador nuevo. Nombre:'); if (nom === null) return;
+    const ape = prompt('Apellido:'); if (ape === null) return;
+    const cel = prompt('Celular (opcional):') || '';
+    r = await api({action: 'editar_jugador_pareja', id_club: idClub, id_categoria: idCat,
+      ci_viejo: ciViejo, ci_companero: ciComp, ci_nuevo: ciNuevo, nombre: nom, apellido: ape, cel});
+  }
+  if (!r.success) { alert('Error: ' + (r.error || 'desconocido')); return; }
+  document.getElementById('club-parejas-' + idClub).style.display = 'none';
+  verParejasClub(idClub);
 }
 
 // ═══ POPULATE EVENT SELECTS ═══
