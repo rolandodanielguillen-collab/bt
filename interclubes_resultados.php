@@ -863,29 +863,30 @@ async function cargarEstado() {
   document.getElementById('tab-resultados').innerHTML = h;
   document.getElementById('modales').innerHTML = modales;
 
-  // ── Tab SF: bracket con conectores + 3er puesto abajo ──
+  // ── Tab SF: bracket con conectores + 3er puesto abajo (placeholders hasta que las llaves existan) ──
   let hs = '';
   const porFase = {};
   (r.llaves || []).forEach(s => porFase[s.fase] = s);
-  if (r.llaves_generadas) {
-    const final = porFase['final'];
-    if (final && final.definida) {
-      hs += `<div class="campeon"><span>🏆 CAMPEÓN: ${UP(final.ganador === final.clubA ? final.nomA : final.nomB)}</span></div>`;
-    }
-    hs += `<div class="bracket-wrapper"><div class="bracket-flex">
-      <div class="bracket-col"><div class="bracket-ronda-header">Semifinales</div><div class="bracket-col-body" id="bracket-body-sf">`;
-    ['semi1', 'semi2'].forEach((f, i) => { if (porFase[f]) hs += serieBloque(porFase[f], `ll${f}`, 0, f, porFase[f].label); });
-    hs += `</div></div>
-      <div class="bracket-conn" id="bracket-conn-sf-fn"><svg></svg></div>
-      <div class="bracket-col"><div class="bracket-ronda-header">Final</div><div class="bracket-col-body" id="bracket-body-fn">`;
-    hs += final ? serieBloque(final, 'llfinal', 0, 'final', '🏆 Final')
-                : `<div class="match-card"><div class="match-header"><span class="round">🏆 Final</span><div class="info"><span class="summary msg">A definir — ganadores de las semis</span></div></div></div>`;
-    hs += `</div></div></div></div>`;
-    hs += `<div class="sec-title">3er Puesto</div>`;
-    hs += porFase['tercer'] ? serieBloque(porFase['tercer'], 'lltercer', 0, 'tercer', '3er Puesto')
-                            : `<div class="msg">Se define con los perdedores de las semifinales.</div>`;
-  } else {
-    hs = `<div class="msg" style="padding:16px 0;">Las semifinales se arman solas al completarse todas las series de ambos grupos (1° Grupo 1 vs 2° Grupo 2 y 1° Grupo 2 vs 2° Grupo 1).</div>`;
+  const final = porFase['final'];
+  if (final && final.definida) {
+    hs += `<div class="campeon"><span>🏆 CAMPEÓN: ${UP(final.ganador === final.clubA ? final.nomA : final.nomB)}</span></div>`;
+  }
+  hs += `<div class="bracket-wrapper"><div class="bracket-flex">
+    <div class="bracket-col"><div class="bracket-ronda-header">Semifinales</div><div class="bracket-col-body" id="bracket-body-sf">`;
+  [['semi1', 'Semifinal 1', '1° Grupo 1 vs 2° Grupo 2'], ['semi2', 'Semifinal 2', '1° Grupo 2 vs 2° Grupo 1']].forEach(([f, lbl, ph]) => {
+    hs += porFase[f] ? serieBloque(porFase[f], `ll${f}`, 0, f, porFase[f].label) : cardPlaceholder(lbl, ph);
+  });
+  hs += `</div></div>
+    <div class="bracket-conn" id="bracket-conn-sf-fn"><svg></svg></div>
+    <div class="bracket-col"><div class="bracket-ronda-header">Final</div><div class="bracket-col-body" id="bracket-body-fn">`;
+  hs += final ? serieBloque(final, 'llfinal', 0, 'final', '🏆 Final')
+              : cardPlaceholder('🏆 Final', porFase['semi1'] ? 'A definir — ganadores de las semis' : 'Ganador SF1 vs Ganador SF2');
+  hs += `</div></div></div></div>`;
+  hs += `<div class="sec-title">3er Puesto</div>`;
+  hs += porFase['tercer'] ? serieBloque(porFase['tercer'], 'lltercer', 0, 'tercer', '3er Puesto')
+                          : cardPlaceholder('3er Puesto', 'Perdedores de las semifinales');
+  if (!r.llaves_generadas) {
+    hs += `<div class="msg" style="padding:12px 0;">Las semifinales se arman solas al completarse todas las series de ambos grupos.</div>`;
   }
   document.getElementById('tab-clasificacion').innerHTML = hs;
   if (document.getElementById('tab-clasificacion').classList.contains('active')) setTimeout(drawBracketLines, 100);
@@ -894,6 +895,11 @@ async function cargarEstado() {
 function toggleMatch(btn) {
   btn.closest('.match-card').classList.toggle('abierta');
   setTimeout(drawBracketLines, 50);
+}
+
+// Card gris del bracket para cruces aún no definidos
+function cardPlaceholder(label, texto) {
+  return `<div class="match-card"><div class="match-header" style="background:#6b7280;cursor:default;"><span class="round">${label}</span><div class="info"><span class="summary" style="font-style:italic;">${texto}</span></div></div></div>`;
 }
 function openModalClasif(id) { document.getElementById(id).classList.add('show'); }
 function closeModalClasif(id) { document.getElementById(id).classList.remove('show'); }
