@@ -462,6 +462,9 @@ if (isset($_GET['action'])) {
   .p-team { min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.45; }
   .p-team.right { text-align: right; }
   .p-club { display: block; font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--accent); margin-bottom: 2px; }
+  .pj-badge { display: inline-block; background: rgba(59,130,246,.12); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 0 6px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
+  .pj-badge.mixta { background: rgba(167,139,250,.12); color: #a78bfa; border-color: #a78bfa; }
   .p-win { color: var(--win); font-weight: 800; }
   .sets { display: flex; gap: 3px; align-items: center; justify-content: center; }
   .sets .ic { width: 34px; padding: 6px 2px; text-align: center; border: 1px solid var(--border); border-radius: 6px;
@@ -584,6 +587,16 @@ function switchTab(t) {
   if (t === 'clasificacion') setTimeout(drawBracketLines, 100);
 }
 
+// Badge del desempate: PAREJA N si los CIs son una dupla inscripta tal cual; si no, MIXTA
+function badgeDes(club, x, y) {
+  const ds = (DATA && DATA.duplas[club]) || [];
+  for (let k = 0; k < ds.length; k++) {
+    const p = [ds[k].ci, ds[k].ci_dupla];
+    if (p.includes(x) && p.includes(y) && x !== y) return `<span class="pj-badge">PAREJA ${k+1}</span>`;
+  }
+  return `<span class="pj-badge mixta">MIXTA</span>`;
+}
+
 function setsInputs(pref, s) {
   s = s || [0,0,0,0,0,0];
   const inp = (id, v) => `<input class="ic" type="number" min="0" max="30" id="${pref}-${id}" value="${v || ''}" placeholder="0">`;
@@ -598,15 +611,16 @@ function leerSets(pref) {
 function filaPartido(m, i, serie, grupo, fase, sid) {
   const pref = `${sid}p${i}`;
   const dupA = DATA.duplas[serie.clubA] || [], dupB = DATA.duplas[serie.clubB] || [];
+  const bp = `<span class="pj-badge">PAREJA ${i+1}</span>`;
   let h = `<div class="p-row${m && m.en_juego === 'si' ? ' p-ej' : ''}">`;
   h += `<div class="p-label">Partido ${i+1} — Dupla ${i+1} vs Dupla ${i+1}${m && m.en_juego === 'si' ? ' <span class="ej-pill">🔴 EN JUEGO</span>' : ''}</div>`;
   if (m) {
     const g1 = m.ganador === 1, g2 = m.ganador === 2;
     h += `<div class="p-grid">
-      <div class="p-team"><span class="p-club">${UP(m.club1 === serie.clubA ? serie.nomA : serie.nomB)}</span>
+      <div class="p-team"><span class="p-club">${UP(m.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${bp}</span>
         <span class="${g1?'p-win':''}">${g1?'✓ ':''}${UP(m.n1a)}<br>${g1?'✓ ':''}${UP(m.n1b)}</span></div>
       ${setsInputs(pref, m.s)}
-      <div class="p-team right"><span class="p-club">${UP(m.club2 === serie.clubA ? serie.nomA : serie.nomB)}</span>
+      <div class="p-team right"><span class="p-club">${UP(m.club2 === serie.clubA ? serie.nomA : serie.nomB)} ${bp}</span>
         <span class="${g2?'p-win':''}">${UP(m.n2a)}${g2?' ✓':''}<br>${UP(m.n2b)}${g2?' ✓':''}</span></div>
     </div>
     <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar</button>
@@ -616,9 +630,9 @@ function filaPartido(m, i, serie, grupo, fase, sid) {
     const args = `{categoria: ${catActual}, grupo: ${grupo}, fase: '${fase}', club1: ${serie.clubA}, club2: ${serie.clubB},
       ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'}`;
     h += `<div class="p-grid">
-      <div class="p-team"><span class="p-club">${UP(serie.nomA)} ${i+1}</span>${UP(dupA[i].j1)}<br>${UP(dupA[i].j2)}</div>
+      <div class="p-team"><span class="p-club">${UP(serie.nomA)} ${bp}</span>${UP(dupA[i].j1)}<br>${UP(dupA[i].j2)}</div>
       ${setsInputs(pref)}
-      <div class="p-team right"><span class="p-club">${UP(serie.nomB)} ${i+1}</span>${UP(dupB[i].j1)}<br>${UP(dupB[i].j2)}</div>
+      <div class="p-team right"><span class="p-club">${UP(serie.nomB)} ${bp}</span>${UP(dupB[i].j1)}<br>${UP(dupB[i].j2)}</div>
     </div>
     <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {...${args}, es_desempate: 0})">Cargar resultado</button>
       <button class="btn btn-gh" onclick="marcarEnJuego(${args})">🎾 En juego</button></div>`;
@@ -658,10 +672,10 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
     if (des) {
       const g1 = des.ganador === 1, g2 = des.ganador === 2;
       h += `<div class="p-grid">
-        <div class="p-team"><span class="p-club">${UP(des.club1 === serie.clubA ? serie.nomA : serie.nomB)}</span>
+        <div class="p-team"><span class="p-club">${UP(des.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(des.club1, des.ci1_a, des.ci1_b)}</span>
           <span class="${g1?'p-win':''}">${g1?'✓ ':''}${UP(des.n1a)}<br>${g1?'✓ ':''}${UP(des.n1b)}</span></div>
         ${setsInputs(pref, des.s)}
-        <div class="p-team right"><span class="p-club">${UP(des.club2 === serie.clubA ? serie.nomA : serie.nomB)}</span>
+        <div class="p-team right"><span class="p-club">${UP(des.club2 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(des.club2, des.ci2_a, des.ci2_b)}</span>
           <span class="${g2?'p-win':''}">${UP(des.n2a)}${g2?' ✓':''}<br>${UP(des.n2b)}${g2?' ✓':''}</span></div>
       </div>
       <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${des.id}})">Guardar</button>

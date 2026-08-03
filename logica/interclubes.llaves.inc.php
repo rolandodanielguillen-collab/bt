@@ -74,6 +74,16 @@ function icn($s) {
     return htmlspecialchars(mb_strtoupper(trim((string)$s), 'UTF-8'));
 }
 
+// Badge de pareja: PAREJA N si los CIs coinciden con una dupla inscripta; si no, MIXTA
+function ic_badge_pareja(array $duplasClub, $ciA, $ciB) {
+    foreach ($duplasClub as $k => $d) {
+        $par = [trim((string)$d['ci']), trim((string)$d['ci_dupla'])];
+        if (in_array(trim((string)$ciA), $par, true) && in_array(trim((string)$ciB), $par, true) && (string)$ciA !== (string)$ciB)
+            return "<span class='pj-badge'>PAREJA " . ($k + 1) . "</span>";
+    }
+    return "<span class='pj-badge mixta'>MIXTA</span>";
+}
+
 // Render de una serie como match-card estilo TVT
 function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
     ['mapaTodos' => $mapaTodos, 'nombres' => $nombres, 'duplas' => $duplas] = $ctx;
@@ -110,11 +120,14 @@ function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
 
     for ($i = 0; $i < $slots; $i++) {
         $m = $regs[$i] ?? null;
+        $bp = "<span class='pj-badge'>PAREJA " . ($i + 1) . "</span>";
         $h .= ic_fila_partido("Partido " . ($i + 1), $m, $a, $b, $nomA, $nomB,
-            $dupA[$i] ?? null, $dupB[$i] ?? null, $nombres);
+            $dupA[$i] ?? null, $dupB[$i] ?? null, $nombres, $bp, $bp);
     }
     foreach ($des as $m) {
-        $h .= ic_fila_partido("★ Desempate", $m, $a, $b, $nomA, $nomB, null, null, $nombres);
+        $h .= ic_fila_partido("★ Desempate", $m, $a, $b, $nomA, $nomB, null, null, $nombres,
+            ic_badge_pareja($duplas[(int)$m['club1']] ?? [], $m['ci1_a'], $m['ci1_b']),
+            ic_badge_pareja($duplas[(int)$m['club2']] ?? [], $m['ci2_a'], $m['ci2_b']));
     }
     if ($necesitaDes && !$des) {
         $h .= "<div class='p-row'><div class='p-label'>★ Desempate — dupla mezclada</div><div class='p-pend'>Por definir</div></div>";
@@ -123,15 +136,15 @@ function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
 }
 
 // Una fila de partido dentro de la serie (con o sin resultado)
-function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $dupSlotA, $dupSlotB, $nombres) {
+function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $dupSlotA, $dupSlotB, $nombres, $badgeL = '', $badgeR = '') {
     if (!$m) {
         if (!$dupSlotA || !$dupSlotB) return '';
         $j = fn($d, $k1, $k2) => icn(($d[$k1] ?: '')) . '<br>' . icn(($d[$k2] ?: ''));
         return "<div class='p-row'><div class='p-label'>{$label}</div>
           <div class='p-grid'>
-            <div class='p-team'><span class='p-club'>" . icn($nomA) . "</span>" . $j($dupSlotA, 'j1', 'j2') . "</div>
+            <div class='p-team'><span class='p-club'>" . icn($nomA) . " {$badgeL}</span>" . $j($dupSlotA, 'j1', 'j2') . "</div>
             <div class='p-score p-pend'>por<br>jugar</div>
-            <div class='p-team right'><span class='p-club'>" . icn($nomB) . "</span>" . $j($dupSlotB, 'j1', 'j2') . "</div>
+            <div class='p-team right'><span class='p-club'>" . icn($nomB) . " {$badgeR}</span>" . $j($dupSlotB, 'j1', 'j2') . "</div>
           </div></div>";
     }
     [$s1, $s2] = ic_sets_partido($m);
@@ -150,9 +163,9 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $dupSlotA, $dupSlotB,
     return "<div class='p-row" . ($ej ? " p-ej" : "") . "'>
       <div class='p-label'>{$label}" . ($ej ? " <span class='ej-pill'>🔴 EN JUEGO</span>" : "") . "</div>
       <div class='p-grid'>
-        <div class='p-team'><span class='p-club'>" . icn($clubDeM1) . "</span>" . $lado('ci1_a', 'ci1_b', $gan === 1) . "</div>
+        <div class='p-team'><span class='p-club'>" . icn($clubDeM1) . " {$badgeL}</span>" . $lado('ci1_a', 'ci1_b', $gan === 1) . "</div>
         <div class='p-score'>" . ($score ? implode(' ', $score) : "<span class='p-pend'>-</span>") . "</div>
-        <div class='p-team right'><span class='p-club'>" . icn($clubDeM2) . "</span>" . $lado('ci2_a', 'ci2_b', $gan === 2) . "</div>
+        <div class='p-team right'><span class='p-club'>" . icn($clubDeM2) . " {$badgeR}</span>" . $lado('ci2_a', 'ci2_b', $gan === 2) . "</div>
       </div></div>";
 }
 
@@ -279,6 +292,9 @@ if (isset($llaves['final'])) {
   .p-team { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.45; }
   .p-team.right { text-align: right; }
   .p-club { display: block; font-size: 9px; font-weight: 800; letter-spacing: .05em; color: #2563eb; margin-bottom: 2px; }
+  .pj-badge { display: inline-block; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+    border-radius: 999px; padding: 0 6px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
+  .pj-badge.mixta { background: #f5f3ff; color: #7c3aed; border-color: #ddd6fe; }
   .p-win { color: #16a34a; font-weight: 800; }
   .p-score { flex-shrink: 0; text-align: center; font-weight: 800; font-size: 13px; }
   .p-score .set { display: inline-block; background: hsl(210,15%,93%); border-radius: 6px; padding: 3px 7px; margin: 1px; }
