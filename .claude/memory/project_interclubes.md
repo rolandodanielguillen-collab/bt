@@ -1,5 +1,52 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## Badges + definidor desempate + edición inscripciones (2026-08-03, LIVE, commits f1..88d7eaa)
+- F1 badges: pills PAREJA N (slot) / MIXTA (CIs vs ic_duplas) en cargador admin
+  (filaPartido/badgeDes) y vista pública (ic_fila_partido/ic_badge_pareja). CSS .pj-badge.
+- F2 definidor 3er partido: acciones `definir_desempate` (fila 0-0 es_desempate=1,
+  en_juego opcional → pública la muestra "por jugar") y `cambiar_dupla_desempate`
+  (solo sin ganador). UI: Cargar desempate / 📌 Definir pareja / 🎾 En juego;
+  ↔ Cambiar pareja con selects preseleccionados (registry SERIES[sid]).
+  Suplentes entran a los selects del desempate con "(suplente)".
+- F3 edición torneo iniciado (solo admin): tvt_api `editar_jugador_pareja`
+  actualiza AMBAS filas espejo con WHERE exacto (ci+ci_dupla+club+ev+cat);
+  need_datos=true si jugador nuevo sin nombre (UI repregunta por prompt);
+  promover suplente propio lo borra de _ic_suplentes; suplente ajeno bloquea.
+  UI tab Clubes → parejas: P1/P2 numeradas + lápiz por jugador + atajo suplente.
+  VERIFICADO: orden Pareja N se conserva (id de fila canónica no cambia);
+  partidos jugados conservan CIs históricos; form del club refleja el cambio.
+- Verificación admin JS: node check_js (extrae <script> y new Function) — el
+  cargador/admin no se puede curl-ear (sesión); el usuario valida en UI.
+- Bracket visible desde el inicio (commit a6b2f9e): pestaña SF de la vista
+  pública ya no espera a _ic_llaves; muestra cards placeholder con los cruces
+  (1°G1 vs 2°G2, 1°G2 vs 2°G1, Ganador SF1 vs SF2, 3er puesto) + conectores.
+  ic_card_placeholder() en interclubes.llaves.inc.php. Commit 49c0a46: mismo
+  bracket placeholder en el cargador admin (cardPlaceholder JS, nota de
+  autogeneración debajo del cuadro).
+
+## DEMO recreado (2026-08-03) + PLAN badges/edición/definidor (pendiente OK del usuario)
+- Demo evento 16 recreado con SQL `ARCHIVOS/demo_interclubes.sql` (sin commitear):
+  6 clubes (ids 101-106), 26 jugadores CIs 9200001-26 medio='demo-ic', cat 25,
+  2 suplentes (AREA 4: Kike Suarez, MOES-YOYI: Beto Ramirez). Estados mixtos:
+  G1 A4-LUJ finalizada 2-0, A4-VB 1-1 SIN desempate (playground definidor),
+  LUJ-VB P1 EN JUEGO; G2 MOES-ARENA 2-1 con desempate mezclado jugado.
+  sha1(16)=1574bddb75c78a6fd2251d61e2993b5146201319.
+  URLs: grafico-interclubes.php?demo-interclubes&e=<sha1>&evento=<sha1> ·
+  interclubes_resultados.php?evento=16 · form club: token md5('demo-club-101'..106).
+  Limpieza: DELETE id_evento=16 en _ic_partidos/_ic_sorteo/_ic_llaves/_ic_suplentes/
+  _p_incripciones/_p_clubes/_relacion_evento_categoria; _p_usuarios medio='demo-ic'; _p_eventos id=16.
+- PLAN 3 fases (análisis hecho, sin implementar):
+  F1 badges PAREJA 1/2 en cuadros: derivar del slot (partido regular N = pareja N,
+  NO se guarda en _ic_partidos); desempate compara CIs vs ic_duplas → PAREJA N o MIXTA.
+  Tocar filaPartido (admin JS) + ic_fila_partido (público PHP) + CSS pill.
+  F2 definidor pareja 3er partido: fila 0-0 es_desempate=1 con CIs elegidos
+  (acción definir_desempate + cambiar dupla si sin ganador); render existente ya
+  soporta fila 0-0 (admin inputs, público "por jugar"); selects + suplentes.
+  F3 editar inscripciones torneo iniciado (SOLO admin, tab Clubes → parejas):
+  acción tvt_api editar_jugador_pareja — UPDATE de AMBAS filas espejo (a,b)+(b,a);
+  orden Pareja N se conserva (ids no cambian); partidos jugados conservan CIs
+  históricos; promover suplente lo saca de _ic_suplentes.
+
 ## Suplente opcional por categoría (2026-08-03, LIVE)
 - 1 jugador suplente OPCIONAL por club por categoría en el form del club
   (interclubes.php): botón "+ Suplente (opcional)" outline debajo de "+ Agregar
