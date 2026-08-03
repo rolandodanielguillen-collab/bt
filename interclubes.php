@@ -143,6 +143,22 @@ function parejasClub($mysqli2, $idClub, $idEvento) {
     return $porCat;
 }
 
+// Suplente opcional del club por categoría (máx 1, tabla _ic_suplentes)
+function suplentesClub($mysqli2, $idClub, $idEvento) {
+    $st = $mysqli2->prepare(
+        "SELECT s.id_categoria, s.ci,
+                CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,'')) AS jug
+           FROM _ic_suplentes s
+           LEFT JOIN _p_usuarios u ON TRIM(u.ci) = TRIM(s.ci)
+          WHERE s.id_club = ? AND s.id_evento = ?");
+    $st->bind_param('ii', $idClub, $idEvento);
+    $st->execute();
+    $res = $st->get_result();
+    $porCat = [];
+    while ($r = $res->fetch_assoc()) $porCat[(int)$r['id_categoria']] = $r;
+    return $porCat;
+}
+
 // Asegura que el jugador exista en _p_usuarios. No modifica jugadores existentes.
 // Devuelve '' si ok, o mensaje de error.
 function asegurarJugador($mysqli2, $ci, $nombre, $apellido, $cel, $sexoCat) {
@@ -210,11 +226,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute();
             $yaInscripto = $st->get_result()->num_rows > 0;
 
+            // Jugador ya cargado como suplente en la categoría (cualquier club)
+            $st = $mysqli2->prepare(
+                "SELECT id FROM _ic_suplentes
+                  WHERE id_evento = ? AND id_categoria = ? AND (ci = ? OR ci = ?) LIMIT 1");
+            $st->bind_param('iiss', $idEvento, $idCat, $ci1, $ci2);
+            $st->execute();
+            $yaSuplente = $st->get_result()->num_rows > 0;
+
             $maxCat = max(1, (int)($cats[$idCat]['max_parejas'] ?? MAX_PAREJAS_POR_CAT));
             if ($nParejas >= $maxCat) {
                 $flash = ['err', 'Tu club ya tiene ' . $maxCat . ' pareja(s) en ' . $cats[$idCat]['categoria'] . '.'];
             } elseif ($yaInscripto) {
                 $flash = ['err', 'Alguno de los jugadores ya está inscripto en esa categoría.'];
+            } elseif ($yaSuplente) {
+                $flash = ['err', 'Alguno de los jugadores ya está cargado como suplente en esa categoría.'];
             } else {
                 $sexoCat = $cats[$idCat]['sexo'] ?? '';
                 try {
@@ -257,6 +283,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $flash = ['err', 'Datos incompletos.'];
         }
+    } elseif ($accion === 'agregar_suplente') {
+        $cats  = categoriasEvento($mysqli2, $idEvento);
+        $idCat = (int)($_POST['categoria'] ?? 0);
+        $ci    = ltrim(preg_replace('/[^0-9]/', '', $_POST['ps_ci'] ?? ''), '0');
+        $limpiar = fn($k) => trim(strip_tags($_POST[$k] ?? ''));
+
+        if (!isset($cats[$idCat])) {
+            $flash = ['err', 'Categoría inválida para este torneo.'];
+        } elseif ((int)$ci < 100000) {
+            $flash = ['err', 'Cédula inválida. Verificá los datos.'];
+        } else {
+            // Ya inscripto en pareja de la categoría (cualquier club)
+            $st = $mysqli2->prepare(
+                "SELECT id FROM _p_incripciones
+                  WHERE ci = ? AND id_categoria = ? AND id_evento = ?
+                    AND estado <> 'bloqueado' LIMIT 1");
+            $st->bind_param('sii', $ci, $idCat, $idEvento);
+            $st->execute();
+            $enPareja = $st->get_result()->num_rows > 0;
+
+            // Ya suplente en la categoría (cualquier club)
+            $st = $mysqli2->prepare(
+                "SELECT id FROM _ic_suplentes WHERE id_evento = ? AND id_categoria = ? AND ci = ? LIMIT 1");
+            $st->bind_param('iis', $idEvento, $idCat, $ci);
+            $st->execute();
+            $yaSuplente = $st->get_result()->num_rows > 0;
+
+            if ($enPareja) {
+                $flash = ['err', 'Ese jugador ya está inscripto en una pareja de esa categoría.'];
+            } elseif ($yaSuplente) {
+                $flash = ['err', 'Ese jugador ya está cargado como suplente en esa categoría.'];
+            } else {
+                $sexoCat = $cats[$idCat]['sexo'] ?? '';
+                try {
+                    $e = asegurarJugador($mysqli2, $ci, $limpiar('ps_nombre'), $limpiar('ps_apellido'), preg_replace('/[^0-9]/', '', $_POST['ps_cel'] ?? ''), $sexoCat);
+                    if ($e !== '') {
+                        $flash = ['err', $e];
+                    } else {
+                        // UNIQUE (id_evento,id_categoria,id_club) garantiza máx 1 suplente por club
+                        $st = $mysqli2->prepare(
+                            "INSERT INTO _ic_suplentes (id_evento, id_categoria, id_club, ci) VALUES (?,?,?,?)");
+                        $st->bind_param('iiis', $idEvento, $idCat, $idClub, $ci);
+                        $flash = $st->execute()
+                            ? ['ok', 'Suplente cargado en ' . $cats[$idCat]['categoria'] . '.']
+                            : ['err', 'Tu club ya tiene un suplente en esa categoría.'];
+                    }
+                } catch (mysqli_sql_exception $e) {
+                    $flash = ['err', 'Tu club ya tiene un suplente en esa categoría.'];
+                }
+            }
+        }
+    } elseif ($accion === 'quitar_suplente') {
+        $idCat = (int)($_POST['categoria'] ?? 0);
+        if ($idCat) {
+            $st = $mysqli2->prepare(
+                "DELETE FROM _ic_suplentes WHERE id_club = ? AND id_evento = ? AND id_categoria = ?");
+            $st->bind_param('iii', $idClub, $idEvento, $idCat);
+            $st->execute();
+            $flash = $st->affected_rows > 0
+                ? ['ok', 'Suplente eliminado.']
+                : ['err', 'No se encontró el suplente.'];
+        } else {
+            $flash = ['err', 'Datos incompletos.'];
+        }
     }
 
     // PRG: redirect para evitar re-envíos con F5
@@ -273,6 +363,7 @@ if (isset($_SESSION['ic_flash'])) {
 // ── Datos para render ────────────────────────────────────────────────────────
 $cats    = categoriasEvento($mysqli2, $idEvento);
 $parejas = parejasClub($mysqli2, $idClub, $idEvento);
+$suplentes = suplentesClub($mysqli2, $idClub, $idEvento);
 $totalParejas = 0;
 foreach ($parejas as $lp) $totalParejas += count($lp);
 
@@ -322,6 +413,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
   .btn { border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 9px 14px; }
   .btn-add { background: var(--azul); color: #fff; margin: 10px 15px 13px; }
   .btn-add:disabled { background: #b8c2cc; cursor: default; }
+  .btn-sup { background: #fff; color: var(--azul); border: 1px solid var(--azul); margin: 10px 15px 13px; }
   .btn-del { background: transparent; color: var(--err); font-size: 12px; padding: 6px 8px; }
   .btn-ok { background: var(--ok); color: #fff; }
   .btn-gh { background: transparent; color: var(--gris); }
@@ -369,6 +461,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
   <div class="resumen">
     Inscribí a las parejas de tu club en cada categoría (el orden de carga define
     <strong>Pareja 1, Pareja 2…</strong> para los enfrentamientos).
+    Podés cargar además <strong>un suplente opcional</strong> por categoría.
     Parejas cargadas: <strong><?= $totalParejas ?></strong>
   </div>
 
@@ -377,6 +470,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
       $n  = count($lp);
       $maxCat = max(1, (int)($cat['max_parejas'] ?? MAX_PAREJAS_POR_CAT));
       $puedeAgregar = $abierta && $n < $maxCat;
+      $sup = $suplentes[$idCat] ?? null;
   ?>
   <div class="cat">
     <div class="cat-h">
@@ -407,8 +501,24 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
     </div>
     <?php endforeach; ?>
 
+    <?php if ($sup): ?>
+    <div class="pareja">
+      <div class="nombres">
+        <span class="ci-chico" style="font-weight:700;">Suplente</span><br>
+        <?= htmlspecialchars(trim($sup['jug']) ?: 'CI ' . maskCi($sup['ci'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($sup['ci'])) ?>)</span>
+      </div>
+      <?php if ($abierta): ?>
+      <form method="post" onsubmit="return confirm('¿Quitar el suplente?')">
+        <input type="hidden" name="accion" value="quitar_suplente">
+        <input type="hidden" name="categoria" value="<?= $idCat ?>">
+        <button type="submit" class="btn btn-del">✕ Quitar</button>
+      </form>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
     <?php if ($puedeAgregar): ?>
-    <button type="button" class="btn btn-add" onclick="toggleForm(<?= $idCat ?>)">+ Agregar pareja</button>
+    <button type="button" class="btn btn-add" onclick="toggleForm('form-<?= $idCat ?>')">+ Agregar pareja</button>
     <form method="post" class="form-pareja" id="form-<?= $idCat ?>">
       <input type="hidden" name="accion" value="agregar_pareja">
       <input type="hidden" name="categoria" value="<?= $idCat ?>">
@@ -419,7 +529,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
           <div class="campo">
             <label>Cédula *</label>
             <input type="tel" name="p<?= $j ?>_ci" required inputmode="numeric" autocomplete="off"
-                   onblur="buscarCI(this, <?= $idCat ?>, <?= $j ?>)">
+                   onblur="buscarCI(this, 'form-<?= $idCat ?>', 'p<?= $j ?>', 'est-<?= $idCat ?>-<?= $j ?>')">
             <div class="estado-ci" id="est-<?= $idCat ?>-<?= $j ?>"></div>
           </div>
           <div class="campo">
@@ -441,7 +551,44 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
       <?php endfor; ?>
       <div class="acciones">
         <button type="submit" class="btn btn-ok">✓ Inscribir pareja</button>
-        <button type="button" class="btn btn-gh" onclick="toggleForm(<?= $idCat ?>)">Cancelar</button>
+        <button type="button" class="btn btn-gh" onclick="toggleForm('form-<?= $idCat ?>')">Cancelar</button>
+      </div>
+    </form>
+    <?php endif; ?>
+
+    <?php if ($abierta && !$sup): ?>
+    <button type="button" class="btn btn-sup" onclick="toggleForm('form-sup-<?= $idCat ?>')">+ Suplente (opcional)</button>
+    <form method="post" class="form-pareja" id="form-sup-<?= $idCat ?>">
+      <input type="hidden" name="accion" value="agregar_suplente">
+      <input type="hidden" name="categoria" value="<?= $idCat ?>">
+      <div class="jug">
+        <div class="titulo">Jugador suplente</div>
+        <div class="fila">
+          <div class="campo">
+            <label>Cédula *</label>
+            <input type="tel" name="ps_ci" required inputmode="numeric" autocomplete="off"
+                   onblur="buscarCI(this, 'form-sup-<?= $idCat ?>', 'ps', 'est-<?= $idCat ?>-s')">
+            <div class="estado-ci" id="est-<?= $idCat ?>-s"></div>
+          </div>
+          <div class="campo">
+            <label>Celular</label>
+            <input type="tel" name="ps_cel" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label>Nombre *</label>
+            <input type="text" name="ps_nombre" autocomplete="off">
+          </div>
+          <div class="campo">
+            <label>Apellido *</label>
+            <input type="text" name="ps_apellido" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="acciones">
+        <button type="submit" class="btn btn-ok">✓ Cargar suplente</button>
+        <button type="button" class="btn btn-gh" onclick="toggleForm('form-sup-<?= $idCat ?>')">Cancelar</button>
       </div>
     </form>
     <?php endif; ?>
@@ -458,19 +605,19 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
 <script>
 const TOKEN = <?= json_encode($token) ?>;
 
-function toggleForm(idCat) {
-  document.getElementById('form-' + idCat).classList.toggle('abierto');
+function toggleForm(id) {
+  document.getElementById(id).classList.toggle('abierto');
 }
 
 // Autocompletar por CI: si el jugador existe, muestra sus datos (enmascarados)
 // y bloquea los campos; si no existe, habilita la carga manual.
-async function buscarCI(input, idCat, j) {
+async function buscarCI(input, formId, prefix, estId) {
   const ci = input.value.replace(/[^0-9]/g, '');
-  const form = document.getElementById('form-' + idCat);
-  const fNombre = form.querySelector('[name="p' + j + '_nombre"]');
-  const fApellido = form.querySelector('[name="p' + j + '_apellido"]');
-  const fCel = form.querySelector('[name="p' + j + '_cel"]');
-  const est = document.getElementById('est-' + idCat + '-' + j);
+  const form = document.getElementById(formId);
+  const fNombre = form.querySelector('[name="' + prefix + '_nombre"]');
+  const fApellido = form.querySelector('[name="' + prefix + '_apellido"]');
+  const fCel = form.querySelector('[name="' + prefix + '_cel"]');
+  const est = document.getElementById(estId);
   fNombre.value = ''; fApellido.value = ''; fCel.value = ''; est.textContent = '';
   fNombre.readOnly = false; fApellido.readOnly = false; fCel.readOnly = false;
   if (ci.length < 5) return;

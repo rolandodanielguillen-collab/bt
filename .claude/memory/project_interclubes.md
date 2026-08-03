@@ -1,5 +1,25 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## Suplente opcional por categoría (2026-08-03, LIVE)
+- 1 jugador suplente OPCIONAL por club por categoría en el form del club
+  (interclubes.php): botón "+ Suplente (opcional)" outline debajo de "+ Agregar
+  pareja", form de 1 jugador (ps_ci/ps_cel/ps_nombre/ps_apellido) con buscar_ci.
+- Tabla nueva `_ic_suplentes` (id_evento, id_categoria, id_club, ci; UNIQUE
+  ev+cat+club = máx 1 por club). COLLATE utf8mb4_unicode_ci — GOTCHA: con el
+  default general_ci el JOIN TRIM(u.ci)=TRIM(s.ci) contra _p_usuarios
+  (unicode_ci) tira "Illegal mix of collations" y la página da 500.
+- NO toca el patrón espejo de _p_incripciones ni los conteos FLOOR(/2).
+- Validaciones cruzadas: suplente no puede estar en pareja de la cat (ni
+  viceversa), ni ser suplente en la cat para otro club. Quitar libre hasta cierre.
+- asegurarJugador reutilizado (alta en _p_usuarios si es nuevo, medio interclubes).
+- JS: toggleForm(id) y buscarCI(input, formId, prefix, estId) generalizados.
+- E2E verificado en prod (club tmp borrado): alta/duplicado/conflicto pareja↔
+  suplente/quitar. GOTCHA test: curl -X POST + -L re-postea el 302 del PRG en
+  loop infinito → usar -d sin -X POST.
+- El suplente NO aparece aún en vista pública (grafico-interclubes) ni en el
+  cargador de resultados (selects de desempate) — pendiente si se pide.
+- Dato real: ARENA BAR ya inscribió 2 parejas (cat 3) al 2026-08-03.
+
 ## Qué es
 Competencia entre clubes: dueños de clubes reciben una URL con token para
 inscribir hasta 2 parejas por categoría. Categorías se crean desde el admin
