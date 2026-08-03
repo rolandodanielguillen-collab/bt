@@ -135,6 +135,12 @@ function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
     return $h . "</div></div>";
 }
 
+// Card placeholder del bracket (cruce aún no definido): el público ve quién jugará vs quién
+function ic_card_placeholder($label, $texto) {
+    return "<div class='match-card'><div class='match-header' style='background:#6b7280;cursor:default;'><span class='round'>{$label}</span>
+      <div class='info'><span class='summary' style='font-style:italic;'>{$texto}</span></div></div></div>";
+}
+
 // Una fila de partido dentro de la serie (con o sin resultado)
 function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $dupSlotA, $dupSlotB, $nombres, $badgeL = '', $badgeR = '') {
     if (!$m) {
@@ -324,9 +330,7 @@ if (isset($llaves['final'])) {
   <!-- Tabs: Resultados | SF → (igual TVT) -->
   <div class="tabs">
     <button class="tab-btn active" id="tabbtn-resultados" onclick="switchTab('resultados')">Resultados</button>
-    <?php if ($llaves): ?>
     <button class="tab-btn" id="tabbtn-clasificacion" onclick="switchTab('clasificacion')">SF &rarr;</button>
-    <?php endif; ?>
   </div>
 
   <!-- Tab Resultados: grupos lado a lado -->
@@ -385,8 +389,8 @@ if (isset($llaves['final'])) {
     </div>
   </div>
 
-  <!-- Tab SF: semis y final (cards completas) con conectores + 3er puesto abajo -->
-  <?php if ($llaves): ?>
+  <!-- Tab SF: semis y final (cards completas) con conectores + 3er puesto abajo.
+       Visible SIEMPRE: antes de definirse las llaves muestra los cruces como placeholder. -->
   <div id="tab-clasificacion" class="tab-content">
     <?php if ($campeon): ?>
       <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
@@ -398,10 +402,14 @@ if (isset($llaves['final'])) {
           <div class="bracket-ronda-header">Semifinales</div>
           <div class="bracket-col-body" id="bracket-body-sf">
             <?php
-            foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2'] as $fase => $lbl):
-                if (!isset($llaves[$fase])) continue;
-                $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
-                echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+            foreach (['semi1' => ['Semifinal 1', '1° Grupo 1 vs 2° Grupo 2'],
+                      'semi2' => ['Semifinal 2', '1° Grupo 2 vs 2° Grupo 1']] as $fase => [$lbl, $ph]):
+                if (isset($llaves[$fase])):
+                    $ca = (int)$llaves[$fase]['clubA']; $cb = (int)$llaves[$fase]['clubB'];
+                    echo ic_card_serie($lbl, $ca, $cb, $msDeFase($fase), $slotsCruce($ca, $cb), $ctx);
+                else:
+                    echo ic_card_placeholder($lbl, $ph);
+                endif;
             endforeach;
             ?>
           </div>
@@ -414,10 +422,10 @@ if (isset($llaves['final'])) {
             if (isset($llaves['final'])):
                 $ca = (int)$llaves['final']['clubA']; $cb = (int)$llaves['final']['clubB'];
                 echo ic_card_serie('🏆 Final', $ca, $cb, $msDeFase('final'), $slotsCruce($ca, $cb), $ctx);
-            else: ?>
-              <div class="match-card"><div class="match-header" style="background:#6b7280;"><span class="round">🏆 Final</span>
-                <div class="info"><span class="summary" style="font-style:italic;">A definir — ganadores de las semis</span></div></div></div>
-            <?php endif; ?>
+            else:
+                echo ic_card_placeholder('🏆 Final', isset($llaves['semi1']) ? 'A definir — ganadores de las semis' : 'Ganador SF1 vs Ganador SF2');
+            endif;
+            ?>
           </div>
         </div>
       </div>
@@ -428,11 +436,10 @@ if (isset($llaves['final'])) {
     <?php if (isset($llaves['tercer'])):
         $ca = (int)$llaves['tercer']['clubA']; $cb = (int)$llaves['tercer']['clubB'];
         echo ic_card_serie('3er Puesto', $ca, $cb, $msDeFase('tercer'), $slotsCruce($ca, $cb), $ctx);
-    else: ?>
-      <div style="font-size:12px;color:hsl(215,14%,55%);font-style:italic;">Se define con los perdedores de las semifinales.</div>
-    <?php endif; ?>
+    else:
+        echo ic_card_placeholder('3er Puesto', 'Perdedores de las semifinales');
+    endif; ?>
   </div>
-  <?php endif; ?>
 
   <?php endif; ?>
 </div>
