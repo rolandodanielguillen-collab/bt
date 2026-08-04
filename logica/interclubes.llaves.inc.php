@@ -105,7 +105,7 @@ function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
     }
     $clase = $enJuego ? 'en-juego' : ($definida ? 'finalizado' : '');
 
-    $h = "<div class='match-card {$clase}'>
+    $h = "<div class='match-card abierta {$clase}'>
       <button class='match-header' onclick='toggleMatch(this)'>
         <span class='round'>{$label}</span>
         <div class='info'><span class='summary'>" . icn($nomA) . " vs " . icn($nomB) . " — {$summary}</span>{$badge}</div>
