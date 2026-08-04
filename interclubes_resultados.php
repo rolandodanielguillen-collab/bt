@@ -598,6 +598,7 @@ if (isset($_GET['action'])) {
     margin: 2px 0; display: block; background: var(--input-bg); color: var(--text); font-family: inherit; }
   .msg { font-size: 12px; color: var(--text2); font-style: italic; }
   .sec-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--text2); margin: 18px 0 8px; }
+  .tercer-box { max-width: 520px; }
   /* Modal clasificación */
   .modal-clasif-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9999; align-items: center; justify-content: center; padding: 16px; }
   .modal-clasif-overlay.show { display: flex; }
@@ -960,9 +961,10 @@ async function cargarEstado() {
   hs += final ? serieBloque(final, 'llfinal', 0, 'final', '🏆 Final')
               : cardPlaceholder('🏆 Final', porFase['semi1'] ? 'A definir — ganadores de las semis' : 'Ganador SF1 vs Ganador SF2');
   hs += `</div></div></div></div>`;
-  hs += `<div class="sec-title">3er Puesto</div>`;
+  hs += `<div class="sec-title">3er Puesto</div><div class="tercer-box">`;
   hs += porFase['tercer'] ? serieBloque(porFase['tercer'], 'lltercer', 0, 'tercer', '3er Puesto')
                           : cardPlaceholder('3er Puesto', 'Perdedores de las semifinales');
+  hs += `</div>`;
   if (!r.llaves_generadas) {
     hs += `<div class="msg" style="padding:12px 0;">Las semifinales se arman solas al completarse todas las series de ambos grupos.</div>`;
   }

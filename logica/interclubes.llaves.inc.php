@@ -333,6 +333,7 @@ if (isset($llaves['final'])) {
     border-radius: 6px; padding: 2px 8px; }
   .p-score .set .set-n { font-size: 8px; font-weight: 800; color: hsl(215,14%,50%); }
   .p-pend { color: hsl(215,14%,60%); font-size: 11px; font-weight: 600; font-style: italic; }
+  .tercer-box { max-width: 520px; }
   /* Mini-card por partido dentro de la serie (colapsada; el header muestra el estado) */
   .pm-card { border: 1px solid hsl(214,25%,88%); border-radius: 8px; margin: 8px 10px; overflow: hidden; background: #fff; }
   .pm-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: none;
@@ -474,14 +475,16 @@ if (isset($llaves['final'])) {
       </div>
     </div>
 
-    <!-- 3er puesto, separado y abajo -->
+    <!-- 3er puesto, separado y abajo (ancho de una columna del bracket, no toda la página) -->
     <div class="bracket-ronda-header" style="text-align:left;margin-top:20px;">3er Puesto</div>
+    <div class="tercer-box">
     <?php if (isset($llaves['tercer'])):
         $ca = (int)$llaves['tercer']['clubA']; $cb = (int)$llaves['tercer']['clubB'];
         echo ic_card_serie('3er Puesto', $ca, $cb, $msDeFase('tercer'), $slotsCruce($ca, $cb), $ctx);
     else:
         echo ic_card_placeholder('3er Puesto', 'Perdedores de las semifinales');
     endif; ?>
+    </div>
   </div>
 
   <?php endif; ?>
