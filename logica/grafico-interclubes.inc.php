@@ -231,35 +231,51 @@ function ic_nombre($n) {
                     </div>
 
                     <?php if ($haySorteo): ?>
-                    <!-- ══ VISTA SORTEO (solo conformación de los grupos; el desarrollo está en Llaves) ══ -->
-                    <div id="vistaSorteo" class="space-y-6">
+                    <!-- ══ VISTA SORTEO (categorías colapsadas; clic = clubes de cada grupo) ══ -->
+                    <div id="vistaSorteo" class="space-y-3">
                         <?php foreach ($sorteoIC as $nomCat => $catData):
                             $gruposCat = $catData['grupos'];
+                            $totClubes = count($gruposCat[1] ?? []) + count($gruposCat[2] ?? []);
                         ?>
-                        <div>
-                            <h3 class="text-center text-base font-extrabold text-gray-900 uppercase tracking-wide mb-3"><?php echo htmlspecialchars($nomCat); ?></h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <?php foreach ([1, 2] as $g):
-                                    $clubesG = $gruposCat[$g] ?? [];
-                                ?>
-                                <div class="border border-gray-700 rounded-lg overflow-hidden">
-                                    <div class="bg-gray-800 px-3 py-2 flex items-center justify-between">
-                                        <span class="text-sm font-bold text-white">Grupo <?php echo $g; ?></span>
-                                        <span class="bg-blue-600 text-white text-[.65rem] font-bold px-2 py-0.5 rounded-full"><?php echo count($clubesG); ?> clubes</span>
-                                    </div>
-                                    <div class="bg-gray-900">
-                                        <?php if (!$clubesG): ?>
-                                            <div class="px-3 py-2.5 text-xs italic" style="color:rgba(255,255,255,.35)">Aún sin sortear</div>
-                                        <?php endif; ?>
-                                        <?php foreach ($clubesG as $i => $c): ?>
-                                        <div class="px-3 py-2.5 flex items-center gap-2 <?php echo $i > 0 ? 'border-t border-gray-800' : ''; ?>">
-                                            <span class="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-300 text-[.6rem] font-extrabold flex items-center justify-center flex-shrink-0"><?php echo $i + 1; ?></span>
-                                            <span class="text-[.8rem] font-bold text-slate-100 uppercase truncate"><?php echo ic_nombre($c['nombre']); ?></span>
+                        <div class="border border-gray-700 rounded-lg overflow-hidden">
+                            <button class="accordion-button w-full flex justify-between items-center p-3 bg-gray-800 hover:bg-gray-700 transition focus:outline-none" onclick="toggleAccordion(this)">
+                                <span class="flex items-center min-w-0">
+                                    <span class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center mr-2.5 flex-shrink-0">
+                                        <i class="fa-solid fa-shuffle text-white" style="font-size:.7rem"></i>
+                                    </span>
+                                    <span class="text-base font-semibold text-white truncate uppercase"><?php echo htmlspecialchars($nomCat); ?></span>
+                                </span>
+                                <span class="flex items-center flex-shrink-0 ml-2">
+                                    <span class="bg-blue-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-full mr-2"><?php echo $totClubes; ?> clubes</span>
+                                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </span>
+                            </button>
+                            <div class="accordion-content bg-gray-900">
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <?php foreach ([1, 2] as $g):
+                                        $clubesG = $gruposCat[$g] ?? [];
+                                    ?>
+                                    <div class="border border-gray-700 rounded-lg overflow-hidden">
+                                        <div class="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                                            <span class="text-sm font-bold text-white">Grupo <?php echo $g; ?></span>
+                                            <span class="bg-blue-600 text-white text-[.65rem] font-bold px-2 py-0.5 rounded-full"><?php echo count($clubesG); ?> clubes</span>
                                         </div>
-                                        <?php endforeach; ?>
+                                        <div>
+                                            <?php if (!$clubesG): ?>
+                                                <div class="px-3 py-2.5 text-xs italic" style="color:rgba(255,255,255,.35)">Aún sin sortear</div>
+                                            <?php endif; ?>
+                                            <?php foreach ($clubesG as $i => $c): ?>
+                                            <div class="px-3 py-2.5 flex items-center gap-2 <?php echo $i > 0 ? 'border-t border-gray-800' : ''; ?>">
+                                                <span class="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-300 text-[.6rem] font-extrabold flex items-center justify-center flex-shrink-0"><?php echo $i + 1; ?></span>
+                                                <span class="text-[.8rem] font-bold text-slate-100 uppercase truncate"><?php echo ic_nombre($c['nombre']); ?></span>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
                                     </div>
+                                    <?php endforeach; ?>
                                 </div>
-                                <?php endforeach; ?>
                             </div>
                         </div>
                         <?php endforeach; ?>
