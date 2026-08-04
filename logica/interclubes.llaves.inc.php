@@ -165,14 +165,17 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
     // Cada set jugado = fila "S1 6-4" (games del club izquierdo primero);
     // los sets sin cargar no se muestran
     $score = [];
-    $mini  = [];
+    $pares = [];
     $nSet = 0;
     foreach ([['s1c1','s1c2'], ['s2c1','s2c2'], ['s3c1','s3c2']] as [$ka, $kb]) {
         $nSet++;
         if ((int)$m[$ka] === 0 && (int)$m[$kb] === 0) continue;
         $score[] = "<span class='set'><span class='set-n'>S{$nSet}</span>" . (int)$m[$ka] . "-" . (int)$m[$kb] . "</span>";
-        $mini[]  = (int)$m[$ka] . "-" . (int)$m[$kb];
+        $pares[] = [(int)$m[$ka], (int)$m[$kb]];
     }
+    // Resumen del header: con ganador, los games se muestran desde SU perspectiva
+    // (ej. ARENA BAR 6-4 aunque esté del lado derecho / sea club2)
+    $miniFmt = fn(bool $flip) => implode(' · ', array_map(fn($p) => $flip ? "{$p[1]}-{$p[0]}" : "{$p[0]}-{$p[1]}", $pares));
     $lado = fn($ka, $kb, $win) =>
         "<span class='" . ($win ? 'p-win' : '') . "'>" . ($win ? '✓ ' : '') . icn($nombres[$m[$ka]] ?? $m[$ka]) . "<br>" .
         ($win ? '✓ ' : '') . icn($nombres[$m[$kb]] ?? $m[$kb]) . "</span>";
@@ -183,16 +186,17 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
         <div class='p-score'>" . ($score ? implode(' ', $score) : "<span class='p-pend'>-</span>") . "</div>
         <div class='p-team right'><span class='p-club'>" . icn($clubDeM2) . " {$badgeR}</span>" . $lado('ci2_a', 'ci2_b', $gan === 2) . "</div>
       </div>";
-    $miniTxt = $mini ? " <b class='pm-mini'>" . implode(' · ', $mini) . "</b>" : '';
+    $miniTxt = $pares ? " <b class='pm-mini'>" . $miniFmt(false) . "</b>" : '';
     if ($ej) {
         // Partido en juego: card abierta para que el parcial se vea sin clic
         return $card(' pm-ej abierta', "<span class='ej-pill'>🔴 EN JUEGO</span>{$miniTxt}", $detalle);
     }
     if ($gan) {
         $ganadorNom = icn($gan === 1 ? $clubDeM1 : $clubDeM2);
-        return $card(' pm-fin', "<span class='badge-finalizado'>FINALIZADO</span> <b class='pm-mini'>{$ganadorNom}</b>{$miniTxt}", $detalle);
+        $miniWin = $pares ? " <b class='pm-mini'>" . $miniFmt($gan === 2) . "</b>" : '';
+        return $card(' pm-fin', "<span class='badge-finalizado'>FINALIZADO</span> <b class='pm-mini'>{$ganadorNom}</b>{$miniWin}", $detalle);
     }
-    return $card(' pm-pend', "<span class='p-pend'>" . ($mini ? "parcial{$miniTxt}" : 'por jugar') . "</span>", $detalle);
+    return $card(' pm-pend', "<span class='p-pend'>" . ($pares ? "parcial{$miniTxt}" : 'por jugar') . "</span>", $detalle);
 }
 
 $ctx = ['mapaTodos' => $mapaTodos, 'nombres' => $nombres, 'duplas' => $duplas];

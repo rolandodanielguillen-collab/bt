@@ -729,9 +729,11 @@ function leerSets(pref) {
 
 // ── Mini-cards por partido (igual que la vista pública): FINALIZADO colapsado,
 //    EN JUEGO / pendiente abiertos, para controlar de un vistazo qué falta ──
-function miniSets(s) {
+// flip=true → games desde la perspectiva del club2 (ganador del lado derecho)
+function miniSets(s, flip) {
   const out = [];
-  for (let k = 0; k < 6; k += 2) if ((s[k] || 0) || (s[k+1] || 0)) out.push(`${s[k] || 0}-${s[k+1] || 0}`);
+  for (let k = 0; k < 6; k += 2) if ((s[k] || 0) || (s[k+1] || 0))
+    out.push(flip ? `${s[k+1] || 0}-${s[k] || 0}` : `${s[k] || 0}-${s[k+1] || 0}`);
   return out.join(' · ');
 }
 function togglePartido(btn) {
@@ -755,8 +757,9 @@ function resumenPartido(m, serie) {
   if (m.ganador !== 0) {
     const ganNom = m.ganador === 1 ? (m.club1 === serie.clubA ? serie.nomA : serie.nomB)
                                    : (m.club2 === serie.clubA ? serie.nomA : serie.nomB);
+    const miniWin = miniSets(m.s, m.ganador === 2);
     return {clase: ' pm-fin', abierta: false,
-            resumen: `<span class="badge-finalizado">FINALIZADO</span> <b class="pm-mini">${UP(ganNom)}</b>${miniTxt}`};
+            resumen: `<span class="badge-finalizado">FINALIZADO</span> <b class="pm-mini">${UP(ganNom)}</b>${miniWin ? ` <b class="pm-mini">${miniWin}</b>` : ''}`};
   }
   if (m.en_juego === 'si') return {clase: ' pm-ej', abierta: true, resumen: `<span class="ej-pill">🔴 EN JUEGO</span>${miniTxt}`};
   return {clase: '', abierta: true, resumen: mini ? `<span class="pm-pend">parcial</span>${miniTxt}` : `<span class="pm-pend">por jugar</span>`};
