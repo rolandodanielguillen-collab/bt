@@ -1,5 +1,22 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## CIERRE 2026-08-04 — modelo POR PARTIDO completo y LIVE (retomar acá)
+Sesión completa deployada y pusheada (commits 507691d..a96b296). El sistema
+quedó: elección de jugadores POR PARTIDO en admin (selects, definir/en
+juego/cambiar), pública CLUB vs CLUB con mini-cards por partido, sets en
+filas S1/S2/S3, ganador al 1er set, confronto directo en posiciones, podio
+escalonado oro/plata/bronce al definirse la final.
+AL RETOMAR MAÑANA:
+- El usuario estuvo probando en el demo ev16 (datos de prueba suyos cargados;
+  semis generadas AREA4vsARENA / MOESvsLUJINI). Seguir iterando ahí.
+- Para el EVENTO REAL (ev15 MUNICH ULTRA): cargar el sorteo oficial de
+  ARCHIVOS/sorteo1..3.jpeg (10 categorías: +40/C/D/E/OPEN × fem/masc, 6
+  clubes, 2 grupos de 3) vía interclubes_sorteo.php; sigue faltando el 6to
+  club (Area 4), las categorías reales y fecha_fin_inscripcion.
+- Borrar demo ev16 cuando ya no haga falta (SQL de limpieza en sección DEMO).
+- Criterio último de desempate = posición del sorteo; si el torneo define
+  otro (moneda/sorteo presencial), cambiarlo en ic_posiciones.
+
 ## RETOMADO 2026-08-04 — sorteo oficial + NUEVO MODELO por partido
 - Sorteo oficial en ARCHIVOS/sorteo1..3.jpeg: 10 categorías (+40 FEM/MASC, C, D, E,
   OPEN × fem/masc), 6 clubes, 2 grupos de 3 por categoría.
@@ -43,6 +60,45 @@
     ganador; 2do set → 2 columnas + ✓ ganador + sin EN JUEGO. Fila test borrada.
   - OJO: el usuario borró TODOS los partidos del demo ev16 probando el admin —
     _ic_partidos quedó en 0 para ev16; playground limpio, no es bug.
+- ITERACIÓN 3 (2026-08-04, LIVE, commits a1594f4+2d2c354+795df17):
+  - Etiquetas S1/S2/S3 en el cargador; luego sets pasaron a FILAS verticales
+    (S1 [6]-[4] hacia el lado de cada club) en admin y pública (.set-row/.set-n).
+  - Sorteo público: categorías COLAPSADAS en acordeón (reusa toggleAccordion);
+    clic despliega Grupo 1/2 con clubes.
+  - Ganador REVERTIDO a "líder en sets": cargar el 1er set ya finaliza el
+    partido (EN JUEGO→FINALIZADO automático); solo queda en juego con sets
+    empatados. La serie sigue cerrando al completar los slots.
+  - GOTCHA: opcache puede servir la versión vieja unos segundos tras scp —
+    un FINALIZADO fantasma en la verificación fue eso, no bug.
+- ITERACIÓN 4 (2026-08-04, LIVE, commit 8c5d83b): en la pública cada PARTIDO
+  de una serie es una mini-card COLAPSADA (.pm-card) con estado en el header:
+  FINALIZADO verde + ganador + sets / 🔴 EN JUEGO naranja + parcial / por
+  jugar gris. togglePartido() JS; aplica a grupos y llaves (mismo renderer).
+  El usuario cargó datos reales por el admin nuevo en vivo (funciona E2E).
+  GOTCHA: NO insertar filas de prueba por SQL mientras el usuario carga en el
+  admin — mis test rows le ensuciaron la serie (borradas, ids 49-50).
+- ITERACIÓN 6 (2026-08-04, LIVE, hasta 0dbb5c4):
+  - EN JUEGO y partidos con jugadores definidos: abiertos en la pública.
+  - Marcador del header FINALIZADO desde la perspectiva del ganador (flip si
+    gana club2): ARENA BAR 6-4, no 4-6 (miniFmt público / miniSets(s,flip) admin).
+  - POSICIONES con CONFRONTO DIRECTO: pts → mini-liga entre empatados (ic_stats
+    reutilizada) → difs globales → posición del sorteo (empate circular
+    perfecto, caso real del demo G2: 3 clubes todo igual). Semis 1°G1vs2°G2
+    quedaron consistentes (MOES 1° G2 por sorteo).
+  - Cargador: quitados los botones 🎲 Sorteo y ← Admin del topbar.
+- ITERACIÓN 7 (2026-08-04, LIVE, hasta a96b296): card 3er Puesto acotada
+  (.tercer-box 520px). PODIO al definirse la final: evolucionó pills doradas →
+  card sobria → PODIO ESCALONADO horizontal (campeón bloque oro 84px, vice
+  plata 54px al medio, tercero bronce 32px al otro extremo, apoyados en la
+  base de la card; labels uppercase + club en tamaño decreciente). Igual en
+  pública (.podio en interclubes.llaves.inc.php) y admin (col() JS + vars tema).
+- ITERACIÓN 5 (2026-08-04, LIVE, commits ce5aadf+6a61301+a13e566):
+  - Pública: series ABIERTAS por defecto; serie definida → colapsada con
+    FINALIZADO (igual que admin). Partidos internos siempre colapsados.
+  - Admin: mini-cards por partido idénticas a la pública (cardPartido/
+    resumenPartido/miniSets JS): FINALIZADO colapsado con ganador+sets en el
+    header; EN JUEGO (naranja) y pendientes abiertos. Desempate = card violeta
+    pm-des. Al guardar con ganador se colapsa y sale de EN JUEGO solo.
 
 ## CIERRE 2026-08-03 — probado y aprobado por el usuario
 Badges PAREJA 1/2, definidor del 3er partido, edición de inscripciones con
