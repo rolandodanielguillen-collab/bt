@@ -562,9 +562,10 @@ if (isset($_GET['action'])) {
     border-radius: 999px; padding: 0 6px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
   .pj-badge.mixta { background: rgba(167,139,250,.12); color: #a78bfa; border-color: #a78bfa; }
   .p-win { color: var(--win); font-weight: 800; }
-  .sets { display: flex; gap: 5px; align-items: center; justify-content: center; }
-  .sets .set-col { display: flex; flex-direction: column; gap: 3px; }
-  .sets .set-lbl { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--text2); text-align: center; }
+  .sets { display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; }
+  .sets .set-row { display: flex; align-items: center; gap: 3px; }
+  .sets .set-lbl { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--text2); width: 16px; text-align: right; }
+  .sets .sep { color: var(--text2); font-size: 10px; }
   .sets .ic { width: 34px; padding: 6px 2px; text-align: center; border: 1px solid var(--border); border-radius: 6px;
     font-size: 13px; font-weight: 700; background: var(--input-bg); color: var(--text); -moz-appearance: textfield; }
   .sets .ic::-webkit-outer-spin-button, .sets .ic::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -695,12 +696,12 @@ function badgeDes(club, x, y) {
   return `<span class="pj-badge mixta">MIXTA</span>`;
 }
 
-// Cada set es una columna: games del club de arriba / games del club de abajo
+// Sets en filas verticales: S1 [games club izq] - [games club der], S2 debajo, S3 debajo
 function setsInputs(pref, s) {
   s = s || [0,0,0,0,0,0];
   const inp = (id, v) => `<input class="ic" type="number" min="0" max="30" id="${pref}-${id}" value="${v || ''}" placeholder="0">`;
-  const col = (a, b, va, vb, n) => `<div class="set-col" title="Set ${n}"><span class="set-lbl">S${n}</span>${inp(a, va)}${inp(b, vb)}</div>`;
-  return `<div class="sets">${col('s1a','s1b',s[0],s[1],1)}${col('s2a','s2b',s[2],s[3],2)}${col('s3a','s3b',s[4],s[5],3)}</div>`;
+  const row = (a, b, va, vb, n) => `<div class="set-row"><span class="set-lbl">S${n}</span>${inp(a, va)}<span class="sep">-</span>${inp(b, vb)}</div>`;
+  return `<div class="sets">${row('s1a','s1b',s[0],s[1],1)}${row('s2a','s2b',s[2],s[3],2)}${row('s3a','s3b',s[4],s[5],3)}</div>`;
 }
 function leerSets(pref) {
   const v = id => parseInt(document.getElementById(pref + '-' + id).value) || 0;

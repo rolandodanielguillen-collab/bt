@@ -154,12 +154,14 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
     [$s1, $s2] = ic_sets_partido($m);
     $gan = ic_ganador_partido($m);
     $ej  = ($m['en_juego'] ?? 'no') === 'si';
-    // Cada set jugado = columna con los games apilados (arriba club1, abajo club2);
+    // Cada set jugado = fila "S1 6-4" (games del club izquierdo primero);
     // los sets sin cargar no se muestran
     $score = [];
+    $nSet = 0;
     foreach ([['s1c1','s1c2'], ['s2c1','s2c2'], ['s3c1','s3c2']] as [$ka, $kb]) {
+        $nSet++;
         if ((int)$m[$ka] === 0 && (int)$m[$kb] === 0) continue;
-        $score[] = "<span class='set'><span>" . (int)$m[$ka] . "</span><span>" . (int)$m[$kb] . "</span></span>";
+        $score[] = "<span class='set'><span class='set-n'>S{$nSet}</span>" . (int)$m[$ka] . "-" . (int)$m[$kb] . "</span>";
     }
     $lado = fn($ka, $kb, $win) =>
         "<span class='" . ($win ? 'p-win' : '') . "'>" . ($win ? '✓ ' : '') . icn($nombres[$m[$ka]] ?? $m[$ka]) . "<br>" .
@@ -302,9 +304,11 @@ if (isset($llaves['final'])) {
     border-radius: 999px; padding: 0 6px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
   .pj-badge.mixta { background: #f5f3ff; color: #7c3aed; border-color: #ddd6fe; }
   .p-win { color: #16a34a; font-weight: 800; }
-  .p-score { flex-shrink: 0; text-align: center; font-weight: 800; font-size: 13px; }
-  .p-score .set { display: inline-flex; flex-direction: column; background: hsl(210,15%,93%); border-radius: 6px;
-    padding: 3px 7px; margin: 1px; line-height: 1.35; vertical-align: middle; }
+  .p-score { flex-shrink: 0; text-align: center; font-weight: 800; font-size: 13px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .p-score .set { display: flex; align-items: center; gap: 4px; background: hsl(210,15%,93%);
+    border-radius: 6px; padding: 2px 8px; }
+  .p-score .set .set-n { font-size: 8px; font-weight: 800; color: hsl(215,14%,50%); }
   .p-pend { color: hsl(215,14%,60%); font-size: 11px; font-weight: 600; font-style: italic; }
 </style>
 </head>

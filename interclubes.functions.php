@@ -24,13 +24,13 @@ function ic_sets_partido(array $m): array {
     return [$s1, $s2, $g1, $g2];
 }
 
-// Ganador del partido (mejor de 3: hay ganador recién con 2 sets ganados):
-// 1 (club1), 2 (club2), 0 (sin definir / en curso — permite carga set a set)
+// Ganador del partido: quien lidera en sets ganados. Cargar el 1er set ya
+// define el partido (pedido 2026-08-04); solo queda "en curso" si los sets
+// cargados están empatados (ej. 1-1 esperando el 3ro).
 function ic_ganador_partido(array $m): int {
     [$s1, $s2] = ic_sets_partido($m);
-    if ($s1 >= 2) return 1;
-    if ($s2 >= 2) return 2;
-    return 0;
+    if ($s1 === $s2) return 0;
+    return $s1 > $s2 ? 1 : 2;
 }
 
 // Duplas de un club en una categoría, en orden de inscripción (Dupla 1, 2, …)
