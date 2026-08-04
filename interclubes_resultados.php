@@ -552,6 +552,25 @@ if (isset($_GET['action'])) {
   .match-card.abierta .match-body { display: block; }
   .p-row { padding: 10px 13px; border-top: 1px solid var(--border); }
   .p-row.p-ej { background: rgba(235,166,82,.12); }
+  /* Mini-card por partido (FINALIZADO colapsado; EN JUEGO / pendiente abiertos) */
+  .pm-card { border: 1px solid var(--border); border-radius: 8px; margin: 8px 10px; overflow: hidden; background: var(--card); }
+  .pm-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: none;
+    background: var(--row); cursor: pointer; font-family: inherit; text-align: left; color: var(--text); }
+  .pm-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text2); white-space: nowrap; }
+  .pm-sum { flex: 1; min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pm-mini { font-weight: 800; color: var(--text); }
+  .pm-pend { color: var(--text2); font-style: italic; }
+  .pm-chev { font-size: 9px; color: var(--text2); transition: transform .25s; }
+  .pm-card.abierta .pm-chev { transform: rotate(180deg); }
+  .pm-body { display: none; padding: 10px 12px; }
+  .pm-card.abierta .pm-body { display: block; }
+  .pm-card.pm-ej { border-color: #EBA652; }
+  .pm-card.pm-ej .pm-head { background: rgba(235,166,82,.18); }
+  .pm-card.pm-fin .pm-head { background: rgba(22,163,74,.12); }
+  .pm-card.pm-des { border-color: rgba(124,58,237,.45); }
+  .pm-card.pm-des .pm-head { background: rgba(124,58,237,.10); }
+  .pm-card.pm-des .pm-title { color: #a78bfa; }
   .p-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: 7px; }
   .ej-pill { background: #EBA652; color: #1f2937; padding: 1px 8px; border-radius: 999px; font-size: 9px; font-weight: 800; }
   .p-grid { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 8px; }
@@ -708,14 +727,49 @@ function leerSets(pref) {
   return {s1c1: v('s1a'), s1c2: v('s1b'), s2c1: v('s2a'), s2c2: v('s2b'), s3c1: v('s3a'), s3c2: v('s3b')};
 }
 
-// Fila de partido: cargado (con badge de pareja real) o slot pendiente con selects de jugadores
+// ── Mini-cards por partido (igual que la vista pública): FINALIZADO colapsado,
+//    EN JUEGO / pendiente abiertos, para controlar de un vistazo qué falta ──
+function miniSets(s) {
+  const out = [];
+  for (let k = 0; k < 6; k += 2) if ((s[k] || 0) || (s[k+1] || 0)) out.push(`${s[k] || 0}-${s[k+1] || 0}`);
+  return out.join(' · ');
+}
+function togglePartido(btn) {
+  btn.closest('.pm-card').classList.toggle('abierta');
+  setTimeout(drawBracketLines, 60);
+}
+function cardPartido(titulo, resumen, body, abierta, clase) {
+  return `<div class="pm-card${clase || ''}${abierta ? ' abierta' : ''}">
+    <button class="pm-head" type="button" onclick="togglePartido(this)">
+      <span class="pm-title">${titulo}</span>
+      <span class="pm-sum">${resumen}</span>
+      <span class="pm-chev">▼</span>
+    </button>
+    <div class="pm-body">${body}</div></div>`;
+}
+// Estado del header según el partido cargado (m puede ser undefined)
+function resumenPartido(m, serie) {
+  if (!m) return {clase: '', abierta: true, resumen: `<span class="pm-pend">por jugar</span>`};
+  const mini = miniSets(m.s);
+  const miniTxt = mini ? ` <b class="pm-mini">${mini}</b>` : '';
+  if (m.ganador !== 0) {
+    const ganNom = m.ganador === 1 ? (m.club1 === serie.clubA ? serie.nomA : serie.nomB)
+                                   : (m.club2 === serie.clubA ? serie.nomA : serie.nomB);
+    return {clase: ' pm-fin', abierta: false,
+            resumen: `<span class="badge-finalizado">FINALIZADO</span> <b class="pm-mini">${UP(ganNom)}</b>${miniTxt}`};
+  }
+  if (m.en_juego === 'si') return {clase: ' pm-ej', abierta: true, resumen: `<span class="ej-pill">🔴 EN JUEGO</span>${miniTxt}`};
+  return {clase: '', abierta: true, resumen: mini ? `<span class="pm-pend">parcial</span>${miniTxt}` : `<span class="pm-pend">por jugar</span>`};
+}
+
+// Partido de la serie como mini-card: cargado (badge de pareja real) o slot con selects
 function filaPartido(m, i, serie, grupo, fase, sid) {
   const pref = `${sid}p${i}`;
-  let h = `<div class="p-row${m && m.en_juego === 'si' ? ' p-ej' : ''}">`;
-  h += `<div class="p-label">Partido ${i+1}${m && m.en_juego === 'si' ? ' <span class="ej-pill">🔴 EN JUEGO</span>' : ''}</div>`;
+  const est = resumenPartido(m, serie);
+  let body;
   if (m) {
     const g1 = m.ganador === 1, g2 = m.ganador === 2;
-    h += `<div id="${pref}-wrap"><div class="p-grid">
+    body = `<div id="${pref}-wrap"><div class="p-grid">
       <div class="p-team"><span class="p-club">${UP(m.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(m.club1, m.ci1_a, m.ci1_b)}</span>
         <span class="${g1?'p-win':''}">${g1?'✓ ':''}${UP(m.n1a)}<br>${g1?'✓ ':''}${UP(m.n1b)}</span></div>
       ${setsInputs(pref, m.s)}
@@ -729,17 +783,16 @@ function filaPartido(m, i, serie, grupo, fase, sid) {
   } else {
     const jugA = DATA.jugadores[serie.clubA] || [], jugB = DATA.jugadores[serie.clubB] || [];
     if (jugA.length < 2 || jugB.length < 2) {
-      h += `<div class="msg">Faltan jugadores inscriptos de ${UP(jugA.length < 2 ? serie.nomA : serie.nomB)}</div>`;
+      body = `<div class="msg">Faltan jugadores inscriptos de ${UP(jugA.length < 2 ? serie.nomA : serie.nomB)}</div>`;
     } else {
-      h += selectsJugadores(pref, serie, {}, true);
-      h += `<div class="acc">
+      body = selectsJugadores(pref, serie, {}, true) + `<div class="acc">
         <button class="btn btn-ok" onclick="guardarPartidoSlot('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0)">Cargar resultado</button>
         <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0, 0)">📌 Definir jugadores</button>
         <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1, 0)">🎾 En juego</button>
       </div>`;
     }
   }
-  return h + `</div>`;
+  return cardPartido(`Partido ${i+1}`, est.resumen, body, est.abierta, est.clase);
 }
 
 function serieBloque(serie, sid, grupo, fase, titulo) {
@@ -768,12 +821,10 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
   const des = serie.partidos.find(x => x.es_desempate);
   if (des || serie.necesita_desempate) {
     const pref = `${sid}des`;
-    h += `<div class="p-row${des && des.en_juego === 'si' ? ' p-ej' : ''}" style="background:rgba(124,58,237,.08);">
-      <div class="p-label" style="color:#a78bfa;">★ Desempate — 3er partido${des && des.en_juego === 'si' ? ' <span class="ej-pill">🔴 EN JUEGO</span>' : ''}</div>
-      <div id="${pref}-wrap">`;
+    let body = `<div id="${pref}-wrap">`;
     if (des) {
       const g1 = des.ganador === 1, g2 = des.ganador === 2;
-      h += `<div class="p-grid">
+      body += `<div class="p-grid">
         <div class="p-team"><span class="p-club">${UP(des.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(des.club1, des.ci1_a, des.ci1_b)}</span>
           <span class="${g1?'p-win':''}">${g1?'✓ ':''}${UP(des.n1a)}<br>${g1?'✓ ':''}${UP(des.n1b)}</span></div>
         ${setsInputs(pref, des.s)}
@@ -785,14 +836,16 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
         <button class="btn btn-gh" onclick="toggleEnJuego(${des.id})">${des.en_juego === 'si' ? 'Quitar en juego' : '🎾 En juego'}</button>
         <button class="btn btn-del" onclick="borrar(${des.id})">Borrar</button></div>`;
     } else {
-      h += selectsJugadores(pref, serie, {}, true);
-      h += `<div class="acc">
+      body += selectsJugadores(pref, serie, {}, true);
+      body += `<div class="acc">
         <button class="btn btn-ok" onclick="guardarPartidoSlot('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1)">Cargar desempate</button>
         <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0, 1)">📌 Definir pareja</button>
         <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1, 1)">🎾 En juego</button>
       </div>`;
     }
-    h += `</div></div>`;
+    body += `</div>`;
+    const est = des ? resumenPartido(des, serie) : {clase: '', abierta: true, resumen: `<span class="pm-pend">definir pareja</span>`};
+    h += cardPartido('★ Desempate', est.resumen, body, est.abierta, ' pm-des' + est.clase);
   }
   return h + `</div></div>`;
 }
