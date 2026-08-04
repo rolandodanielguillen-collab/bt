@@ -140,41 +140,58 @@ function ic_card_placeholder($label, $texto) {
       <div class='info'><span class='summary' style='font-style:italic;'>{$texto}</span></div></div></div>";
 }
 
-// Una fila de partido dentro de la serie. Sin fila cargada aún → CLUB vs CLUB
-// (los jugadores se definen partido a partido desde el admin).
+// Un partido dentro de la serie: mini-card COLAPSADA con el estado a la vista
+// (FINALIZADO verde / 🔴 EN JUEGO naranja / por jugar gris). Clic = detalle.
 function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '', $badgeR = '') {
+    $card = function ($clase, $resumen, $detalle) use ($label) {
+        return "<div class='pm-card{$clase}'>
+          <button class='pm-head' onclick='togglePartido(this)'>
+            <span class='pm-title'>{$label}</span>
+            <span class='pm-sum'>{$resumen}</span>
+            <span class='pm-chev'>▼</span>
+          </button>
+          <div class='pm-body'>{$detalle}</div></div>";
+    };
     if (!$m) {
-        return "<div class='p-row'><div class='p-label'>{$label}</div>
-          <div class='p-grid'>
+        return $card(' pm-pend', "<span class='p-pend'>por jugar</span>",
+            "<div class='p-grid'>
             <div class='p-team'><span class='p-club'>" . icn($nomA) . "</span><span class='p-pend'>Jugadores a designar</span></div>
             <div class='p-score p-pend'>por<br>jugar</div>
             <div class='p-team right'><span class='p-club'>" . icn($nomB) . "</span><span class='p-pend'>Jugadores a designar</span></div>
-          </div></div>";
+          </div>");
     }
-    [$s1, $s2] = ic_sets_partido($m);
     $gan = ic_ganador_partido($m);
     $ej  = ($m['en_juego'] ?? 'no') === 'si';
     // Cada set jugado = fila "S1 6-4" (games del club izquierdo primero);
     // los sets sin cargar no se muestran
     $score = [];
+    $mini  = [];
     $nSet = 0;
     foreach ([['s1c1','s1c2'], ['s2c1','s2c2'], ['s3c1','s3c2']] as [$ka, $kb]) {
         $nSet++;
         if ((int)$m[$ka] === 0 && (int)$m[$kb] === 0) continue;
         $score[] = "<span class='set'><span class='set-n'>S{$nSet}</span>" . (int)$m[$ka] . "-" . (int)$m[$kb] . "</span>";
+        $mini[]  = (int)$m[$ka] . "-" . (int)$m[$kb];
     }
     $lado = fn($ka, $kb, $win) =>
         "<span class='" . ($win ? 'p-win' : '') . "'>" . ($win ? '✓ ' : '') . icn($nombres[$m[$ka]] ?? $m[$ka]) . "<br>" .
         ($win ? '✓ ' : '') . icn($nombres[$m[$kb]] ?? $m[$kb]) . "</span>";
     $clubDeM1 = ((int)$m['club1'] === $a) ? $nomA : $nomB;
     $clubDeM2 = ((int)$m['club2'] === $a) ? $nomA : $nomB;
-    return "<div class='p-row" . ($ej ? " p-ej" : "") . "'>
-      <div class='p-label'>{$label}" . ($ej ? " <span class='ej-pill'>🔴 EN JUEGO</span>" : "") . "</div>
-      <div class='p-grid'>
+    $detalle = "<div class='p-grid'>
         <div class='p-team'><span class='p-club'>" . icn($clubDeM1) . " {$badgeL}</span>" . $lado('ci1_a', 'ci1_b', $gan === 1) . "</div>
         <div class='p-score'>" . ($score ? implode(' ', $score) : "<span class='p-pend'>-</span>") . "</div>
         <div class='p-team right'><span class='p-club'>" . icn($clubDeM2) . " {$badgeR}</span>" . $lado('ci2_a', 'ci2_b', $gan === 2) . "</div>
-      </div></div>";
+      </div>";
+    $miniTxt = $mini ? " <b class='pm-mini'>" . implode(' · ', $mini) . "</b>" : '';
+    if ($ej) {
+        return $card(' pm-ej', "<span class='ej-pill'>🔴 EN JUEGO</span>{$miniTxt}", $detalle);
+    }
+    if ($gan) {
+        $ganadorNom = icn($gan === 1 ? $clubDeM1 : $clubDeM2);
+        return $card(' pm-fin', "<span class='badge-finalizado'>FINALIZADO</span> <b class='pm-mini'>{$ganadorNom}</b>{$miniTxt}", $detalle);
+    }
+    return $card(' pm-pend', "<span class='p-pend'>" . ($mini ? "parcial{$miniTxt}" : 'por jugar') . "</span>", $detalle);
 }
 
 $ctx = ['mapaTodos' => $mapaTodos, 'nombres' => $nombres, 'duplas' => $duplas];
@@ -310,6 +327,21 @@ if (isset($llaves['final'])) {
     border-radius: 6px; padding: 2px 8px; }
   .p-score .set .set-n { font-size: 8px; font-weight: 800; color: hsl(215,14%,50%); }
   .p-pend { color: hsl(215,14%,60%); font-size: 11px; font-weight: 600; font-style: italic; }
+  /* Mini-card por partido dentro de la serie (colapsada; el header muestra el estado) */
+  .pm-card { border: 1px solid hsl(214,25%,88%); border-radius: 8px; margin: 8px 10px; overflow: hidden; background: #fff; }
+  .pm-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: none;
+    background: hsl(210,20%,96%); cursor: pointer; font-family: inherit; text-align: left; }
+  .pm-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    color: hsl(215,14%,45%); white-space: nowrap; }
+  .pm-sum { flex: 1; min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pm-mini { font-weight: 800; color: hsl(220,20%,25%); }
+  .pm-chev { font-size: 9px; color: hsl(215,14%,55%); transition: transform .25s; }
+  .pm-card.abierta .pm-chev { transform: rotate(180deg); }
+  .pm-body { display: none; padding: 10px 12px; }
+  .pm-card.abierta .pm-body { display: block; }
+  .pm-card.pm-ej { border-color: #EBA652; }
+  .pm-card.pm-ej .pm-head { background: rgba(235,166,82,.18); }
+  .pm-card.pm-fin .pm-head { background: rgba(22,163,74,.10); }
 </style>
 </head>
 <body>
@@ -449,6 +481,10 @@ if (isset($llaves['final'])) {
   <?php endif; ?>
 </div>
 <script>
+function togglePartido(btn) {
+  btn.closest('.pm-card').classList.toggle('abierta');
+  if (typeof drawBracketLines === 'function') setTimeout(drawBracketLines, 60);
+}
 function toggleMatch(btn) {
   btn.closest('.match-card').classList.toggle('abierta');
   setTimeout(drawBracketLines, 50); // las alturas cambian al desplegar
