@@ -113,19 +113,18 @@ function ic_card_serie($label, $a, $b, array $ms, int $slots, array $ctx) {
       </button>
       <div class='match-body'>";
 
-    // Partidos regulares por slot + desempate
+    // Partidos regulares por slot + desempate (los jugadores se definen partido a partido)
     $regs = array_values(array_filter($ms, fn($m) => !(int)$m['es_desempate']));
     $des  = array_values(array_filter($ms, fn($m) => (int)$m['es_desempate']));
-    $dupA = $duplas[$a] ?? []; $dupB = $duplas[$b] ?? [];
 
     for ($i = 0; $i < $slots; $i++) {
         $m = $regs[$i] ?? null;
-        $bp = "<span class='pj-badge'>PAREJA " . ($i + 1) . "</span>";
-        $h .= ic_fila_partido("Partido " . ($i + 1), $m, $a, $b, $nomA, $nomB,
-            $dupA[$i] ?? null, $dupB[$i] ?? null, $nombres, $bp, $bp);
+        $bL = $m ? ic_badge_pareja($duplas[(int)$m['club1']] ?? [], $m['ci1_a'], $m['ci1_b']) : '';
+        $bR = $m ? ic_badge_pareja($duplas[(int)$m['club2']] ?? [], $m['ci2_a'], $m['ci2_b']) : '';
+        $h .= ic_fila_partido("Partido " . ($i + 1), $m, $a, $b, $nomA, $nomB, $nombres, $bL, $bR);
     }
     foreach ($des as $m) {
-        $h .= ic_fila_partido("★ Desempate", $m, $a, $b, $nomA, $nomB, null, null, $nombres,
+        $h .= ic_fila_partido("★ Desempate", $m, $a, $b, $nomA, $nomB, $nombres,
             ic_badge_pareja($duplas[(int)$m['club1']] ?? [], $m['ci1_a'], $m['ci1_b']),
             ic_badge_pareja($duplas[(int)$m['club2']] ?? [], $m['ci2_a'], $m['ci2_b']));
     }
@@ -141,16 +140,15 @@ function ic_card_placeholder($label, $texto) {
       <div class='info'><span class='summary' style='font-style:italic;'>{$texto}</span></div></div></div>";
 }
 
-// Una fila de partido dentro de la serie (con o sin resultado)
-function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $dupSlotA, $dupSlotB, $nombres, $badgeL = '', $badgeR = '') {
+// Una fila de partido dentro de la serie. Sin fila cargada aún → CLUB vs CLUB
+// (los jugadores se definen partido a partido desde el admin).
+function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '', $badgeR = '') {
     if (!$m) {
-        if (!$dupSlotA || !$dupSlotB) return '';
-        $j = fn($d, $k1, $k2) => icn(($d[$k1] ?: '')) . '<br>' . icn(($d[$k2] ?: ''));
         return "<div class='p-row'><div class='p-label'>{$label}</div>
           <div class='p-grid'>
-            <div class='p-team'><span class='p-club'>" . icn($nomA) . " {$badgeL}</span>" . $j($dupSlotA, 'j1', 'j2') . "</div>
+            <div class='p-team'><span class='p-club'>" . icn($nomA) . "</span><span class='p-pend'>Jugadores a designar</span></div>
             <div class='p-score p-pend'>por<br>jugar</div>
-            <div class='p-team right'><span class='p-club'>" . icn($nomB) . " {$badgeR}</span>" . $j($dupSlotB, 'j1', 'j2') . "</div>
+            <div class='p-team right'><span class='p-club'>" . icn($nomB) . "</span><span class='p-pend'>Jugadores a designar</span></div>
           </div></div>";
     }
     [$s1, $s2] = ic_sets_partido($m);

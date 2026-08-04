@@ -3,10 +3,10 @@
  * interclubes_resultados.php — Carga de resultados y posiciones (Interclubes)
  * ================================================================
  * Uso: interclubes_resultados.php?evento=<id>   (requiere sesión de admin)
- * Por categoría y grupo: cada serie club vs club muestra sus partidos:
- *   Partido 1 = dupla 1 vs dupla 1, Partido 2 = dupla 2 vs dupla 2, …
- *   (2 sets + 3er set si empatan). Serie empatada → partido de desempate
- *   con dupla mezclada (se eligen los jugadores).
+ * Por categoría y grupo: cada serie club vs club muestra sus partidos.
+ *   Los jugadores de CADA partido se eligen en el momento (selects con los
+ *   inscriptos + suplentes del club). 2 sets + 3er set si empatan.
+ *   Serie empatada → partido de desempate (misma mecánica de selección).
  * La tabla de posiciones del grupo se recalcula sola.
  * ================================================================
  */
@@ -333,6 +333,9 @@ if (isset($_GET['action'])) {
         if (!$idCat || !$club1 || !$club2 || in_array('', $cis, true) || ($fase === 'grupo' && !$grupo)) {
             echo json_encode(['success' => false, 'error' => 'Faltan datos del partido']); exit;
         }
+        if ($cis['ci1_a'] === $cis['ci1_b'] || $cis['ci2_a'] === $cis['ci2_b']) {
+            echo json_encode(['success' => false, 'error' => 'Los jugadores de una dupla deben ser distintos']); exit;
+        }
         if ($fase === 'grupo') {
             // Ambos clubes deben estar sorteados en ese grupo
             $st = $mysqli2->prepare("SELECT COUNT(*) c FROM _ic_sorteo WHERE id_evento=? AND id_categoria=? AND grupo=? AND id_club IN (?,?)");
@@ -398,13 +401,14 @@ if (isset($_GET['action'])) {
         exit;
     }
 
-    // Definir la dupla del desempate SIN resultado (opcionalmente marcándolo en juego)
-    if ($action === 'definir_desempate') {
+    // Definir los jugadores de un partido SIN resultado (regular o desempate; opcional EN JUEGO)
+    if ($action === 'definir_partido' || $action === 'definir_desempate') {
         $idCat   = abs((int)($_GET['categoria'] ?? 0));
         $grupo   = abs((int)($_GET['grupo'] ?? 0));
         $club1   = abs((int)($_GET['club1'] ?? 0));
         $club2   = abs((int)($_GET['club2'] ?? 0));
         $enJuego = (int)($_GET['en_juego'] ?? 0) ? 'si' : 'no';
+        $esDes   = ($action === 'definir_desempate' || (int)($_GET['es_desempate'] ?? 0)) ? 1 : 0;
         $fase    = preg_replace('/[^a-z0-9]/', '', $_GET['fase'] ?? 'grupo');
         if (!in_array($fase, ['grupo', 'semi1', 'semi2', 'final', 'tercer'], true)) $fase = 'grupo';
         if ($fase !== 'grupo') $grupo = 0;
@@ -416,29 +420,44 @@ if (isset($_GET['action'])) {
         if ($cis['ci1_a'] === $cis['ci1_b'] || $cis['ci2_a'] === $cis['ci2_b']) {
             echo json_encode(['success' => false, 'error' => 'Los jugadores de una dupla deben ser distintos']); exit;
         }
-        // Un solo desempate por cruce
-        $st = $mysqli2->prepare(
-            "SELECT id FROM _ic_partidos
-              WHERE id_evento=? AND id_categoria=? AND fase=? AND grupo=? AND es_desempate=1
-                AND ((club1=? AND club2=?) OR (club1=? AND club2=?)) LIMIT 1");
-        $st->bind_param('iisiiiii', $idEvento, $idCat, $fase, $grupo, $club1, $club2, $club2, $club1);
-        $st->execute();
-        if ($st->get_result()->num_rows > 0) {
-            echo json_encode(['success' => false, 'error' => 'El desempate ya está definido en esta serie']); exit;
+        if ($esDes) {
+            // Un solo desempate por cruce
+            $st = $mysqli2->prepare(
+                "SELECT id FROM _ic_partidos
+                  WHERE id_evento=? AND id_categoria=? AND fase=? AND grupo=? AND es_desempate=1
+                    AND ((club1=? AND club2=?) OR (club1=? AND club2=?)) LIMIT 1");
+            $st->bind_param('iisiiiii', $idEvento, $idCat, $fase, $grupo, $club1, $club2, $club2, $club1);
+            $st->execute();
+            if ($st->get_result()->num_rows > 0) {
+                echo json_encode(['success' => false, 'error' => 'El desempate ya está definido en esta serie']); exit;
+            }
+        } else {
+            // No crear más partidos regulares que los slots de la serie
+            $slots = max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $club1)),
+                                count(ic_duplas($mysqli2, $idEvento, $idCat, $club2))));
+            $st = $mysqli2->prepare(
+                "SELECT COUNT(*) c FROM _ic_partidos
+                  WHERE id_evento=? AND id_categoria=? AND fase=? AND grupo=? AND es_desempate=0
+                    AND ((club1=? AND club2=?) OR (club1=? AND club2=?))");
+            $st->bind_param('iisiiiii', $idEvento, $idCat, $fase, $grupo, $club1, $club2, $club2, $club1);
+            $st->execute();
+            if ((int)$st->get_result()->fetch_assoc()['c'] >= $slots) {
+                echo json_encode(['success' => false, 'error' => 'La serie ya tiene todos sus partidos creados']); exit;
+            }
         }
         $st = $mysqli2->prepare(
             "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, fase, club1, club2, es_desempate, en_juego,
                 ci1_a, ci1_b, ci2_a, ci2_b)
-             VALUES (?,?,?,?,?,?,1,?,?,?,?,?)");
-        $st->bind_param('iiisiisssss', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $enJuego,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+        $st->bind_param('iiisiiisssss', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $esDes, $enJuego,
             $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b']);
         $st->execute();
         echo json_encode(['success' => true, 'id' => $mysqli2->insert_id]);
         exit;
     }
 
-    // Cambiar la dupla de un desempate todavía sin resultado
-    if ($action === 'cambiar_dupla_desempate') {
+    // Cambiar los jugadores de un partido todavía sin resultado (regular o desempate)
+    if ($action === 'cambiar_jugadores' || $action === 'cambiar_dupla_desempate') {
         $id  = abs((int)($_GET['id'] ?? 0));
         $cis = [];
         foreach (['ci1_a','ci1_b','ci2_a','ci2_b'] as $k) $cis[$k] = preg_replace('/[^0-9]/', '', $_GET[$k] ?? '');
@@ -446,13 +465,13 @@ if (isset($_GET['action'])) {
         if ($cis['ci1_a'] === $cis['ci1_b'] || $cis['ci2_a'] === $cis['ci2_b']) {
             echo json_encode(['success' => false, 'error' => 'Los jugadores de una dupla deben ser distintos']); exit;
         }
-        $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id=? AND id_evento=? AND es_desempate=1 LIMIT 1");
+        $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id=? AND id_evento=? LIMIT 1");
         $st->bind_param('ii', $id, $idEvento);
         $st->execute();
         $m = $st->get_result()->fetch_assoc();
-        if (!$m) { echo json_encode(['success' => false, 'error' => 'Desempate no encontrado']); exit; }
+        if (!$m) { echo json_encode(['success' => false, 'error' => 'Partido no encontrado']); exit; }
         if (ic_ganador_partido($m) !== 0) {
-            echo json_encode(['success' => false, 'error' => 'El desempate ya tiene resultado (borralo para rehacerlo)']); exit;
+            echo json_encode(['success' => false, 'error' => 'El partido ya tiene resultado (borralo para rehacerlo)']); exit;
         }
         $st = $mysqli2->prepare("UPDATE _ic_partidos SET ci1_a=?, ci1_b=?, ci2_a=?, ci2_b=? WHERE id=? LIMIT 1");
         $st->bind_param('ssssi', $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b'], $id);
@@ -588,7 +607,7 @@ if (isset($_GET['action'])) {
   <div class="topbar">
     <div>
       <h1>📊 Carga de resultados — <?= htmlspecialchars($evento['evento']) ?></h1>
-      <div class="sub">P1: dupla 1 vs dupla 1 · P2: dupla 2 vs dupla 2 · serie 1-1 → desempate con dupla mezclada · las llaves avanzan solas</div>
+      <div class="sub">Los jugadores de cada partido se eligen al cargarlo · serie 1-1 → desempate · las llaves avanzan solas</div>
     </div>
     <div class="der">
       <a class="lk" href="/interclubes_sorteo.php?evento=<?= $idEvento ?>">🎲 Sorteo</a>
@@ -683,37 +702,36 @@ function leerSets(pref) {
   return {s1c1: v('s1a'), s1c2: v('s1b'), s2c1: v('s2a'), s2c2: v('s2b'), s3c1: v('s3a'), s3c2: v('s3b')};
 }
 
-// Fila de partido (cargado o slot pendiente) con inputs
+// Fila de partido: cargado (con badge de pareja real) o slot pendiente con selects de jugadores
 function filaPartido(m, i, serie, grupo, fase, sid) {
   const pref = `${sid}p${i}`;
-  const dupA = DATA.duplas[serie.clubA] || [], dupB = DATA.duplas[serie.clubB] || [];
-  const bp = `<span class="pj-badge">PAREJA ${i+1}</span>`;
   let h = `<div class="p-row${m && m.en_juego === 'si' ? ' p-ej' : ''}">`;
-  h += `<div class="p-label">Partido ${i+1} — Dupla ${i+1} vs Dupla ${i+1}${m && m.en_juego === 'si' ? ' <span class="ej-pill">🔴 EN JUEGO</span>' : ''}</div>`;
+  h += `<div class="p-label">Partido ${i+1}${m && m.en_juego === 'si' ? ' <span class="ej-pill">🔴 EN JUEGO</span>' : ''}</div>`;
   if (m) {
     const g1 = m.ganador === 1, g2 = m.ganador === 2;
-    h += `<div class="p-grid">
-      <div class="p-team"><span class="p-club">${UP(m.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${bp}</span>
+    h += `<div id="${pref}-wrap"><div class="p-grid">
+      <div class="p-team"><span class="p-club">${UP(m.club1 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(m.club1, m.ci1_a, m.ci1_b)}</span>
         <span class="${g1?'p-win':''}">${g1?'✓ ':''}${UP(m.n1a)}<br>${g1?'✓ ':''}${UP(m.n1b)}</span></div>
       ${setsInputs(pref, m.s)}
-      <div class="p-team right"><span class="p-club">${UP(m.club2 === serie.clubA ? serie.nomA : serie.nomB)} ${bp}</span>
+      <div class="p-team right"><span class="p-club">${UP(m.club2 === serie.clubA ? serie.nomA : serie.nomB)} ${badgeDes(m.club2, m.ci2_a, m.ci2_b)}</span>
         <span class="${g2?'p-win':''}">${UP(m.n2a)}${g2?' ✓':''}<br>${UP(m.n2b)}${g2?' ✓':''}</span></div>
     </div>
     <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${m.id}})">Guardar</button>
+      ${m.ganador === 0 ? `<button class="btn btn-gh" onclick="cambiarJugadores('${sid}', ${m.id}, '${pref}')">↔ Cambiar jugadores</button>` : ''}
       <button class="btn btn-gh" onclick="toggleEnJuego(${m.id})">${m.en_juego === 'si' ? 'Quitar en juego' : '🎾 En juego'}</button>
-      <button class="btn btn-del" onclick="borrar(${m.id})">Borrar</button></div>`;
-  } else if (dupA[i] && dupB[i]) {
-    const args = `{categoria: ${catActual}, grupo: ${grupo}, fase: '${fase}', club1: ${serie.clubA}, club2: ${serie.clubB},
-      ci1_a: '${dupA[i].ci}', ci1_b: '${dupA[i].ci_dupla}', ci2_a: '${dupB[i].ci}', ci2_b: '${dupB[i].ci_dupla}'}`;
-    h += `<div class="p-grid">
-      <div class="p-team"><span class="p-club">${UP(serie.nomA)} ${bp}</span>${UP(dupA[i].j1)}<br>${UP(dupA[i].j2)}</div>
-      ${setsInputs(pref)}
-      <div class="p-team right"><span class="p-club">${UP(serie.nomB)} ${bp}</span>${UP(dupB[i].j1)}<br>${UP(dupB[i].j2)}</div>
-    </div>
-    <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {...${args}, es_desempate: 0})">Cargar resultado</button>
-      <button class="btn btn-gh" onclick="marcarEnJuego(${args})">🎾 En juego</button></div>`;
+      <button class="btn btn-del" onclick="borrar(${m.id})">Borrar</button></div></div>`;
   } else {
-    h += `<div class="msg">Falta la dupla ${i+1} de ${!dupA[i] ? esc(serie.nomA) : esc(serie.nomB)}</div>`;
+    const jugA = DATA.jugadores[serie.clubA] || [], jugB = DATA.jugadores[serie.clubB] || [];
+    if (jugA.length < 2 || jugB.length < 2) {
+      h += `<div class="msg">Faltan jugadores inscriptos de ${UP(jugA.length < 2 ? serie.nomA : serie.nomB)}</div>`;
+    } else {
+      h += selectsJugadores(pref, serie, {}, true);
+      h += `<div class="acc">
+        <button class="btn btn-ok" onclick="guardarPartidoSlot('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0)">Cargar resultado</button>
+        <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0, 0)">📌 Definir jugadores</button>
+        <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1, 0)">🎾 En juego</button>
+      </div>`;
+    }
   }
   return h + `</div>`;
 }
@@ -757,15 +775,15 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
           <span class="${g2?'p-win':''}">${UP(des.n2a)}${g2?' ✓':''}<br>${UP(des.n2b)}${g2?' ✓':''}</span></div>
       </div>
       <div class="acc"><button class="btn btn-ok" onclick="guardar('${pref}', {id: ${des.id}})">Guardar</button>
-        ${des.ganador === 0 ? `<button class="btn btn-gh" onclick="cambiarPareja('${sid}')">↔ Cambiar pareja</button>` : ''}
+        ${des.ganador === 0 ? `<button class="btn btn-gh" onclick="cambiarJugadores('${sid}', ${des.id}, '${pref}')">↔ Cambiar pareja</button>` : ''}
         <button class="btn btn-gh" onclick="toggleEnJuego(${des.id})">${des.en_juego === 'si' ? 'Quitar en juego' : '🎾 En juego'}</button>
         <button class="btn btn-del" onclick="borrar(${des.id})">Borrar</button></div>`;
     } else {
-      h += selectsDesempate(pref, serie, {}, true);
+      h += selectsJugadores(pref, serie, {}, true);
       h += `<div class="acc">
-        <button class="btn btn-ok" onclick="guardarDesempate('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB})">Cargar desempate</button>
-        <button class="btn btn-gh" onclick="definirDesempate('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0)">📌 Definir pareja</button>
-        <button class="btn btn-gh" onclick="definirDesempate('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1)">🎾 En juego</button>
+        <button class="btn btn-ok" onclick="guardarPartidoSlot('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1)">Cargar desempate</button>
+        <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 0, 1)">📌 Definir pareja</button>
+        <button class="btn btn-gh" onclick="definirPartido('${pref}', ${catActual}, ${grupo}, '${fase}', ${serie.clubA}, ${serie.clubB}, 1, 1)">🎾 En juego</button>
       </div>`;
     }
     h += `</div></div>`;
@@ -773,8 +791,8 @@ function serieBloque(serie, sid, grupo, fase, titulo) {
   return h + `</div></div>`;
 }
 
-// Selects de jugadores del desempate (incluye suplentes); pre = CIs preseleccionados
-function selectsDesempate(pref, serie, pre, conSets) {
+// Selects de jugadores de un partido (incluye suplentes); pre = CIs preseleccionados
+function selectsJugadores(pref, serie, pre, conSets) {
   pre = pre || {};
   const selJug = (club, nom, id) => {
     let o = `<select class="jug" id="${pref}-${id}"><option value="">Jugador de ${esc(nom)}...</option>`;
@@ -790,45 +808,45 @@ function selectsDesempate(pref, serie, pre, conSets) {
   </div>`;
 }
 
-function leerJugadoresDes(pref) {
+function leerJugadores(pref) {
   const v = id => document.getElementById(pref + '-' + id).value;
   if (!v('j1a') || !v('j1b') || !v('j2a') || !v('j2b')) { toast('Elegí los 4 jugadores'); return null; }
   if (v('j1a') === v('j1b') || v('j2a') === v('j2b')) { toast('Los jugadores de una dupla deben ser distintos'); return null; }
   return {ci1_a: v('j1a'), ci1_b: v('j1b'), ci2_a: v('j2a'), ci2_b: v('j2b')};
 }
 
-// Crea el desempate SIN resultado (aparece en la vista pública como "por jugar")
-async function definirDesempate(pref, cat, grupo, fase, clubA, clubB, enJuego) {
-  const cis = leerJugadoresDes(pref);
+// Crea el partido SIN resultado (aparece en la vista pública como "por jugar")
+async function definirPartido(pref, cat, grupo, fase, clubA, clubB, enJuego, esDes) {
+  const cis = leerJugadores(pref);
   if (!cis) return;
-  const r = await api({action: 'definir_desempate', categoria: cat, grupo, fase, club1: clubA, club2: clubB, en_juego: enJuego ? 1 : 0, ...cis});
+  const r = await api({action: 'definir_partido', categoria: cat, grupo, fase, club1: clubA, club2: clubB,
+    es_desempate: esDes ? 1 : 0, en_juego: enJuego ? 1 : 0, ...cis});
   if (!r.success) { toast(r.error || 'Error'); return; }
-  toast(enJuego ? 'Desempate EN JUEGO 🎾' : 'Pareja definida ✓');
+  toast(enJuego ? 'Partido EN JUEGO 🎾' : 'Jugadores definidos ✓');
   cargarEstado();
 }
 
-// Reemplaza la vista del desempate por selects preseleccionados para cambiar la dupla
-function cambiarPareja(sid) {
+// Reemplaza la vista del partido por selects preseleccionados para cambiar los jugadores
+function cambiarJugadores(sid, id, pref) {
   const serie = SERIES[sid];
   if (!serie) return;
-  const des = serie.partidos.find(x => x.es_desempate);
-  if (!des) return;
-  const pref = `${sid}des`;
-  const alineado = des.club1 === serie.clubA;
-  const pre = alineado ? {j1a: des.ci1_a, j1b: des.ci1_b, j2a: des.ci2_a, j2b: des.ci2_b}
-                       : {j1a: des.ci2_a, j1b: des.ci2_b, j2a: des.ci1_a, j2b: des.ci1_b};
-  document.getElementById(pref + '-wrap').innerHTML = selectsDesempate(pref, serie, pre, false) +
-    `<div class="acc"><button class="btn btn-ok" onclick="guardarCambioPareja('${sid}', ${des.id}, ${alineado ? 1 : 0})">Guardar pareja</button>
+  const m = serie.partidos.find(x => x.id === id);
+  if (!m) return;
+  const alineado = m.club1 === serie.clubA;
+  const pre = alineado ? {j1a: m.ci1_a, j1b: m.ci1_b, j2a: m.ci2_a, j2b: m.ci2_b}
+                       : {j1a: m.ci2_a, j1b: m.ci2_b, j2a: m.ci1_a, j2b: m.ci1_b};
+  document.getElementById(pref + '-wrap').innerHTML = selectsJugadores(pref, serie, pre, false) +
+    `<div class="acc"><button class="btn btn-ok" onclick="guardarCambioJugadores('${pref}', ${id}, ${alineado ? 1 : 0})">Guardar jugadores</button>
      <button class="btn btn-gh" onclick="cargarEstado()">Cancelar</button></div>`;
 }
 
-async function guardarCambioPareja(sid, id, alineado) {
-  const cis = leerJugadoresDes(`${sid}des`);
+async function guardarCambioJugadores(pref, id, alineado) {
+  const cis = leerJugadores(pref);
   if (!cis) return;
   const env = alineado ? cis : {ci1_a: cis.ci2_a, ci1_b: cis.ci2_b, ci2_a: cis.ci1_a, ci2_b: cis.ci1_b};
-  const r = await api({action: 'cambiar_dupla_desempate', id, ...env});
+  const r = await api({action: 'cambiar_jugadores', id, ...env});
   if (!r.success) { toast(r.error || 'Error'); return; }
-  toast('Pareja cambiada ✓');
+  toast('Jugadores cambiados ✓');
   cargarEstado();
 }
 
@@ -940,16 +958,11 @@ async function guardar(pref, extra) {
   toast('Guardado ✓');
   cargarEstado();
 }
-async function guardarDesempate(pref, cat, grupo, fase, clubA, clubB) {
-  const cis = leerJugadoresDes(pref);
+// Alta de partido con resultado desde un slot pendiente (lee jugadores de los selects)
+async function guardarPartidoSlot(pref, cat, grupo, fase, clubA, clubB, esDes) {
+  const cis = leerJugadores(pref);
   if (!cis) return;
-  await guardar(pref, {categoria: cat, grupo, fase, club1: clubA, club2: clubB, es_desempate: 1, ...cis});
-}
-async function marcarEnJuego(args) {
-  const r = await api({action: 'en_juego', ...args});
-  if (!r.success) { toast(r.error || 'Error'); return; }
-  toast('Partido en juego 🎾');
-  cargarEstado();
+  await guardar(pref, {categoria: cat, grupo, fase, club1: clubA, club2: clubB, es_desempate: esDes ? 1 : 0, ...cis});
 }
 async function toggleEnJuego(id) {
   await api({action: 'en_juego', id});

@@ -1,5 +1,33 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## RETOMADO 2026-08-04 — sorteo oficial + NUEVO MODELO por partido
+- Sorteo oficial en ARCHIVOS/sorteo1..3.jpeg: 10 categorías (+40 FEM/MASC, C, D, E,
+  OPEN × fem/masc), 6 clubes, 2 grupos de 3 por categoría.
+- CAMBIO pedido: la elección de jugadores pasa a ser POR PARTIDO — en el admin se
+  cargan los jugadores que disputan cada partido (ya no dupla N = orden de
+  inscripción); la vista pública muestra CLUB vs CLUB. Demo ev16 sigue vivo para
+  iterar visual.
+- IMPLEMENTADO Y LIVE 2026-08-04 (deployado a VPS, .bak-20260804):
+  - interclubes_resultados.php: cada slot pendiente muestra selects de jugadores
+    (inscriptos + suplentes) con 3 botones: Cargar resultado / 📌 Definir
+    jugadores / 🎾 En juego. Partido sin resultado tiene "↔ Cambiar jugadores".
+    Badge PAREJA N / MIXTA derivado de los CIs reales (badgeDes) en TODOS los
+    partidos. Backend: acción `definir_partido` (generaliza definir_desempate,
+    con tope de slots regulares por cruce) y `cambiar_jugadores` (generaliza
+    cambiar_dupla_desempate, cualquier partido sin ganador); alias viejos siguen
+    aceptados. guardar_partido valida dupla con jugadores distintos.
+    Removidos del JS: marcarEnJuego, guardarDesempate, definirDesempate,
+    cambiarPareja, guardarCambioPareja (reemplazados por genéricos).
+  - logica/interclubes.llaves.inc.php: slot sin fila → CLUB vs CLUB con
+    "Jugadores a designar" + "por jugar" (sin nombres de duplas derivadas);
+    ic_fila_partido perdió los params dupSlotA/dupSlotB. Partidos cargados con
+    badge ic_badge_pareja real.
+  - grafico-interclubes.inc.php sin cambios (solo muestra partidos ya cargados).
+  - Verificado en vivo con demo ev16: 10 slots "a designar", 16 PAREJA + 2 MIXTA,
+    EN JUEGO ok, ambas páginas 200, php -l limpio, JS validado con node.
+  - Slots por serie sigue = min(duplas inscriptas de ambos clubes).
+  - El admin (con sesión) lo valida el usuario en UI.
+
 ## CIERRE 2026-08-03 — probado y aprobado por el usuario
 Badges PAREJA 1/2, definidor del 3er partido, edición de inscripciones con
 torneo iniciado y bracket placeholder (público + admin): TODO LIVE, probado
