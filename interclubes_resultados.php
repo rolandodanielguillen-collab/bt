@@ -620,8 +620,12 @@ if (isset($_GET['action'])) {
   .bracket-conn { flex: 0 0 24px; position: relative; }
   .bracket-conn svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .bracket-conn svg line { stroke: var(--border); stroke-width: 1.5; }
-  .campeon { text-align: center; margin: 10px 0 14px; }
-  .campeon span { display: inline-block; background: #facc15; color: #713f12; font-weight: 800; font-size: 13px; padding: 7px 20px; border-radius: 999px; }
+  /* Podio: oro > plata > bronce (relación de tamaños ~60/35/15) */
+  .podio { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 10px 0 16px; }
+  .podio span { display: inline-block; font-weight: 800; border-radius: 999px; white-space: nowrap; }
+  .podio-oro    { background: #facc15; color: #713f12; font-size: 22px; padding: 13px 34px; box-shadow: 0 3px 10px rgba(250,204,21,.35); }
+  .podio-plata  { background: #d1d5db; color: #374151; font-size: 13px; padding: 8px 20px; }
+  .podio-bronce { background: #cd7f32; color: #3f2308; font-size: 10px; padding: 5px 14px; }
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff;
     padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; z-index: 99999; }
 </style>
@@ -948,7 +952,14 @@ async function cargarEstado() {
   (r.llaves || []).forEach(s => porFase[s.fase] = s);
   const final = porFase['final'];
   if (final && final.definida) {
-    hs += `<div class="campeon"><span>🏆 CAMPEÓN: ${UP(final.ganador === final.clubA ? final.nomA : final.nomB)}</span></div>`;
+    const viceNom = final.ganador === final.clubA ? final.nomB : final.nomA;
+    const ter = porFase['tercer'];
+    const terNom = ter && ter.definida ? (ter.ganador === ter.clubA ? ter.nomA : ter.nomB) : '';
+    hs += `<div class="podio">
+      <span class="podio-oro">🏆 CAMPEÓN: ${UP(final.ganador === final.clubA ? final.nomA : final.nomB)}</span>
+      <span class="podio-plata">🥈 VICE CAMPEÓN: ${UP(viceNom)}</span>
+      ${terNom ? `<span class="podio-bronce">🥉 3ER PUESTO: ${UP(terNom)}</span>` : ''}
+    </div>`;
   }
   hs += `<div class="bracket-wrapper"><div class="bracket-flex">
     <div class="bracket-col"><div class="bracket-ronda-header">Semifinales</div><div class="bracket-col-body" id="bracket-body-sf">`;

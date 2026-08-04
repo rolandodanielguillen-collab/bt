@@ -216,11 +216,19 @@ if ($idCat) {
     while ($r = $res->fetch_assoc()) $llaves[$r['fase']] = $r;
 }
 $msDeFase = fn($fase) => array_values(array_filter($partidos, fn($m) => $m['fase'] === $fase));
-$campeon = '';
+$campeon = $vice = $tercero = '';
 if (isset($llaves['final'])) {
     $fa = (int)$llaves['final']['clubA']; $fb = (int)$llaves['final']['clubB'];
     [, , $defF, $ganF] = ic_estado_serie($msDeFase('final'), $fa, $fb, $slotsCruce($fa, $fb));
-    if ($defF) $campeon = $mapaTodos[$ganF] ?? '';
+    if ($defF) {
+        $campeon = $mapaTodos[$ganF] ?? '';
+        $vice    = $mapaTodos[$ganF === $fa ? $fb : $fa] ?? '';
+    }
+}
+if (isset($llaves['tercer'])) {
+    $ta = (int)$llaves['tercer']['clubA']; $tb = (int)$llaves['tercer']['clubB'];
+    [, , $defT, $ganT] = ic_estado_serie($msDeFase('tercer'), $ta, $tb, $slotsCruce($ta, $tb));
+    if ($defT) $tercero = $mapaTodos[$ganT] ?? '';
 }
 ?>
 <!DOCTYPE html>
@@ -268,8 +276,12 @@ if (isset($llaves['final'])) {
   table.pos td { padding: 8px 6px; text-align: center; border-top: 1px solid hsl(214,25%,90%); }
   table.pos td.club { text-align: left; font-weight: 700; }
   table.pos tr.lider td { background: #ecfdf5; }
-  .campeon { text-align: center; margin: 14px 0; }
-  .campeon span { display: inline-block; background: #facc15; color: #713f12; font-weight: 800; font-size: 14px; padding: 8px 22px; border-radius: 999px; }
+  /* Podio: oro > plata > bronce (relación de tamaños ~60/35/15) */
+  .podio { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 16px 0; }
+  .podio span { display: inline-block; font-weight: 800; border-radius: 999px; white-space: nowrap; }
+  .podio-oro    { background: #facc15; color: #713f12; font-size: 22px; padding: 13px 34px; box-shadow: 0 3px 10px rgba(250,204,21,.45); }
+  .podio-plata  { background: #d1d5db; color: #374151; font-size: 13px; padding: 8px 20px; }
+  .podio-bronce { background: #cd7f32; color: #3f2308; font-size: 10px; padding: 5px 14px; }
   /* Bracket eliminatorio (igual TVT) */
   .bracket-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px; }
   .bracket-container { display: flex; align-items: stretch; min-width: max-content; gap: 0; }
@@ -437,7 +449,11 @@ if (isset($llaves['final'])) {
        Visible SIEMPRE: antes de definirse las llaves muestra los cruces como placeholder. -->
   <div id="tab-clasificacion" class="tab-content">
     <?php if ($campeon): ?>
-      <div class="campeon"><span>🏆 CAMPEÓN: <?php echo icn($campeon); ?></span></div>
+      <div class="podio">
+        <span class="podio-oro">🏆 CAMPEÓN: <?php echo icn($campeon); ?></span>
+        <?php if ($vice): ?><span class="podio-plata">🥈 VICE CAMPEÓN: <?php echo icn($vice); ?></span><?php endif; ?>
+        <?php if ($tercero): ?><span class="podio-bronce">🥉 3ER PUESTO: <?php echo icn($tercero); ?></span><?php endif; ?>
+      </div>
     <?php endif; ?>
 
     <div class="bracket-wrapper">
