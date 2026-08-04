@@ -185,7 +185,8 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
       </div>";
     $miniTxt = $mini ? " <b class='pm-mini'>" . implode(' · ', $mini) . "</b>" : '';
     if ($ej) {
-        return $card(' pm-ej', "<span class='ej-pill'>🔴 EN JUEGO</span>{$miniTxt}", $detalle);
+        // Partido en juego: card abierta para que el parcial se vea sin clic
+        return $card(' pm-ej abierta', "<span class='ej-pill'>🔴 EN JUEGO</span>{$miniTxt}", $detalle);
     }
     if ($gan) {
         $ganadorNom = icn($gan === 1 ? $clubDeM1 : $clubDeM2);
