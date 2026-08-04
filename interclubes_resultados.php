@@ -620,12 +620,22 @@ if (isset($_GET['action'])) {
   .bracket-conn { flex: 0 0 24px; position: relative; }
   .bracket-conn svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .bracket-conn svg line { stroke: var(--border); stroke-width: 1.5; }
-  /* Podio: oro > plata > bronce (relación de tamaños ~60/35/15) */
-  .podio { display: flex; flex-direction: column; align-items: center; gap: 7px; margin: 10px 0 16px; }
-  .podio span { display: inline-block; font-weight: 800; border-radius: 999px; white-space: nowrap; }
-  .podio-oro    { background: #facc15; color: #713f12; font-size: 22px; padding: 13px 34px; box-shadow: 0 3px 10px rgba(250,204,21,.35); }
-  .podio-plata  { background: #d1d5db; color: #374151; font-size: 13px; padding: 8px 20px; }
-  .podio-bronce { background: #cd7f32; color: #3f2308; font-size: 10px; padding: 5px 14px; }
+  /* Podio sobrio: tarjeta con medallones oro/plata/bronce y jerarquía tipográfica */
+  .podio { max-width: 400px; margin: 10px auto 18px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; }
+  .podio-row { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--border); }
+  .podio-row:first-child { border-top: 0; }
+  .podio-1 { background: linear-gradient(90deg, rgba(201,162,39,.10), transparent 60%); padding: 15px 18px; }
+  .podio-pos { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; flex-shrink: 0; }
+  .podio-1 .podio-pos { background: linear-gradient(135deg,#f3d878,#c9a227); color: #4d3c07; }
+  .podio-2 .podio-pos { background: linear-gradient(135deg,#e8eaee,#b3bac4); color: #40474f; }
+  .podio-3 .podio-pos { background: linear-gradient(135deg,#d8a25e,#a9702f); color: #40270c; }
+  .podio-label { display: block; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--text2); }
+  .podio-club { font-weight: 800; color: var(--text); }
+  .podio-1 .podio-club { font-size: 17px; }
+  .podio-2 .podio-club { font-size: 14px; }
+  .podio-3 .podio-club { font-size: 12px; }
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff;
     padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; z-index: 99999; }
 </style>
@@ -952,14 +962,13 @@ async function cargarEstado() {
   (r.llaves || []).forEach(s => porFase[s.fase] = s);
   const final = porFase['final'];
   if (final && final.definida) {
+    const campNom = final.ganador === final.clubA ? final.nomA : final.nomB;
     const viceNom = final.ganador === final.clubA ? final.nomB : final.nomA;
     const ter = porFase['tercer'];
     const terNom = ter && ter.definida ? (ter.ganador === ter.clubA ? ter.nomA : ter.nomB) : '';
-    hs += `<div class="podio">
-      <span class="podio-oro">🏆 CAMPEÓN: ${UP(final.ganador === final.clubA ? final.nomA : final.nomB)}</span>
-      <span class="podio-plata">🥈 VICE CAMPEÓN: ${UP(viceNom)}</span>
-      ${terNom ? `<span class="podio-bronce">🥉 3ER PUESTO: ${UP(terNom)}</span>` : ''}
-    </div>`;
+    const fila = (n, label, club) => `<div class="podio-row podio-${n}"><span class="podio-pos">${n}</span>
+      <div><span class="podio-label">${label}</span><span class="podio-club">${UP(club)}</span></div></div>`;
+    hs += `<div class="podio">${fila(1, 'Campeón', campNom)}${fila(2, 'Vice campeón', viceNom)}${terNom ? fila(3, 'Tercer puesto', terNom) : ''}</div>`;
   }
   hs += `<div class="bracket-wrapper"><div class="bracket-flex">
     <div class="bracket-col"><div class="bracket-ronda-header">Semifinales</div><div class="bracket-col-body" id="bracket-body-sf">`;
