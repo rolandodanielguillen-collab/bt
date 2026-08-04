@@ -276,23 +276,23 @@ if (isset($llaves['tercer'])) {
   table.pos td { padding: 8px 6px; text-align: center; border-top: 1px solid hsl(214,25%,90%); }
   table.pos td.club { text-align: left; font-weight: 700; }
   table.pos tr.lider td { background: #ecfdf5; }
-  /* Podio sobrio: tarjeta con medallones oro/plata/bronce y jerarquía tipográfica */
-  .podio { max-width: 400px; margin: 18px auto; background: #fff; border: 1px solid hsl(214,25%,86%);
-    border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .podio-row { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid hsl(214,25%,93%); }
-  .podio-row:first-child { border-top: 0; }
-  .podio-1 { background: linear-gradient(90deg, rgba(201,162,39,.08), transparent 60%); padding: 15px 18px; }
-  .podio-pos { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 13px; flex-shrink: 0; }
-  .podio-1 .podio-pos { background: linear-gradient(135deg,#f3d878,#c9a227); color: #4d3c07; }
-  .podio-2 .podio-pos { background: linear-gradient(135deg,#e8eaee,#b3bac4); color: #40474f; }
-  .podio-3 .podio-pos { background: linear-gradient(135deg,#d8a25e,#a9702f); color: #40270c; }
-  .podio-label { display: block; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
-    color: hsl(215,14%,50%); }
-  .podio-club { font-weight: 800; color: hsl(220,20%,15%); }
-  .podio-1 .podio-club { font-size: 17px; }
-  .podio-2 .podio-club { font-size: 14px; }
-  .podio-3 .podio-club { font-size: 12px; }
+  /* Podio escalonado: campeón, vice al medio y tercero al otro extremo,
+     bloques oro/plata/bronce de altura decreciente apoyados en la base de la card */
+  .podio { display: flex; align-items: flex-end; justify-content: center; gap: 10px; max-width: 480px;
+    margin: 18px auto; background: #fff; border: 1px solid hsl(214,25%,86%); border-radius: 10px;
+    padding: 18px 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .podio-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .podio-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: hsl(215,14%,50%); }
+  .podio-club { font-weight: 800; color: hsl(220,20%,15%); margin: 2px 0 8px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .podio-1 .podio-club { font-size: 16px; }
+  .podio-2 .podio-club { font-size: 13px; }
+  .podio-3 .podio-club { font-size: 11px; }
+  .podio-bloque { width: 100%; border-radius: 8px 8px 0 0; display: flex; align-items: flex-start;
+    justify-content: center; padding-top: 7px; font-weight: 800; }
+  .podio-1 .podio-bloque { height: 84px; background: linear-gradient(180deg,#f3d878,#c9a227); color: #4d3c07; font-size: 20px; }
+  .podio-2 .podio-bloque { height: 54px; background: linear-gradient(180deg,#e8eaee,#b3bac4); color: #40474f; font-size: 16px; }
+  .podio-3 .podio-bloque { height: 32px; background: linear-gradient(180deg,#d8a25e,#a9702f); color: #40270c; font-size: 13px; }
   /* Bracket eliminatorio (igual TVT) */
   .bracket-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px 0 16px; }
   .bracket-container { display: flex; align-items: stretch; min-width: max-content; gap: 0; }
@@ -461,20 +461,23 @@ if (isset($llaves['tercer'])) {
   <div id="tab-clasificacion" class="tab-content">
     <?php if ($campeon): ?>
       <div class="podio">
-        <div class="podio-row podio-1">
-          <span class="podio-pos">1</span>
-          <div><span class="podio-label">Campeón</span><span class="podio-club"><?php echo icn($campeon); ?></span></div>
+        <div class="podio-col podio-1">
+          <span class="podio-label">Campeón</span>
+          <span class="podio-club"><?php echo icn($campeon); ?></span>
+          <div class="podio-bloque">1</div>
         </div>
         <?php if ($vice): ?>
-        <div class="podio-row podio-2">
-          <span class="podio-pos">2</span>
-          <div><span class="podio-label">Vice campeón</span><span class="podio-club"><?php echo icn($vice); ?></span></div>
+        <div class="podio-col podio-2">
+          <span class="podio-label">Vice campeón</span>
+          <span class="podio-club"><?php echo icn($vice); ?></span>
+          <div class="podio-bloque">2</div>
         </div>
         <?php endif; ?>
         <?php if ($tercero): ?>
-        <div class="podio-row podio-3">
-          <span class="podio-pos">3</span>
-          <div><span class="podio-label">Tercer puesto</span><span class="podio-club"><?php echo icn($tercero); ?></span></div>
+        <div class="podio-col podio-3">
+          <span class="podio-label">Tercer puesto</span>
+          <span class="podio-club"><?php echo icn($tercero); ?></span>
+          <div class="podio-bloque">3</div>
         </div>
         <?php endif; ?>
       </div>
