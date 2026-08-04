@@ -196,7 +196,8 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
         $miniWin = $pares ? " <b class='pm-mini'>" . $miniFmt($gan === 2) . "</b>" : '';
         return $card(' pm-fin', "<span class='badge-finalizado'>FINALIZADO</span> <b class='pm-mini'>{$ganadorNom}</b>{$miniWin}", $detalle);
     }
-    return $card(' pm-pend', "<span class='p-pend'>" . ($pares ? "parcial{$miniTxt}" : 'por jugar') . "</span>", $detalle);
+    // Jugadores ya definidos (fila 0-0 o parcial empatado): card abierta para verlos
+    return $card(' pm-pend abierta', "<span class='p-pend'>" . ($pares ? "parcial{$miniTxt}" : 'por jugar') . "</span>", $detalle);
 }
 
 $ctx = ['mapaTodos' => $mapaTodos, 'nombres' => $nombres, 'duplas' => $duplas];
