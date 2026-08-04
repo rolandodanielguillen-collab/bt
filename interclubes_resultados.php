@@ -308,15 +308,17 @@ if (isset($_GET['action'])) {
             if ($v < 0 || $v > 30) { echo json_encode(['success' => false, 'error' => 'Games inválidos']); exit; }
             $s[$k] = $v;
         }
-        // Debe haber un ganador
-        $tmp = array_merge($s, ['club1' => 1, 'club2' => 2, 'es_desempate' => 0]);
-        if (ic_ganador_partido($tmp) === 0) {
-            echo json_encode(['success' => false, 'error' => 'El partido debe tener un ganador (cargá el set de desempate si empataron)']); exit;
+        // Carga progresiva: se puede guardar set a set. Sin ganador (nadie llegó a
+        // 2 sets) el partido queda EN JUEGO; con ganador se apaga solo.
+        if (array_sum($s) === 0) {
+            echo json_encode(['success' => false, 'error' => 'Cargá al menos un set (para dejar el partido armado sin resultado usá Definir jugadores)']); exit;
         }
+        $tmp = array_merge($s, ['club1' => 1, 'club2' => 2, 'es_desempate' => 0]);
+        $enJuego = ic_ganador_partido($tmp) === 0 ? 'si' : 'no';
 
         if ($id) {
-            $st = $mysqli2->prepare("UPDATE _ic_partidos SET s1c1=?,s1c2=?,s2c1=?,s2c2=?,s3c1=?,s3c2=?, en_juego='no' WHERE id=? AND id_evento=? LIMIT 1");
-            $st->bind_param('iiiiiiii', $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2'], $id, $idEvento);
+            $st = $mysqli2->prepare("UPDATE _ic_partidos SET s1c1=?,s1c2=?,s2c1=?,s2c2=?,s3c1=?,s3c2=?, en_juego=? WHERE id=? AND id_evento=? LIMIT 1");
+            $st->bind_param('iiiiiisii', $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2'], $enJuego, $id, $idEvento);
             $st->execute();
             $st = $mysqli2->prepare("SELECT id_categoria FROM _ic_partidos WHERE id=? LIMIT 1");
             $st->bind_param('i', $id);
@@ -356,10 +358,10 @@ if (isset($_GET['action'])) {
             }
         }
         $st = $mysqli2->prepare(
-            "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, fase, club1, club2, es_desempate,
+            "INSERT INTO _ic_partidos (id_evento, id_categoria, grupo, fase, club1, club2, es_desempate, en_juego,
                 ci1_a, ci1_b, ci2_a, ci2_b, s1c1, s1c2, s2c1, s2c2, s3c1, s3c2)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $st->bind_param('iiisiiissssiiiiii', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $esDes,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $st->bind_param('iiisiiisssssiiiiii', $idEvento, $idCat, $grupo, $fase, $club1, $club2, $esDes, $enJuego,
             $cis['ci1_a'], $cis['ci1_b'], $cis['ci2_a'], $cis['ci2_b'],
             $s['s1c1'], $s['s1c2'], $s['s2c1'], $s['s2c2'], $s['s3c1'], $s['s3c2']);
         $st->execute();
@@ -560,12 +562,12 @@ if (isset($_GET['action'])) {
     border-radius: 999px; padding: 0 6px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
   .pj-badge.mixta { background: rgba(167,139,250,.12); color: #a78bfa; border-color: #a78bfa; }
   .p-win { color: var(--win); font-weight: 800; }
-  .sets { display: flex; gap: 3px; align-items: center; justify-content: center; }
+  .sets { display: flex; gap: 5px; align-items: center; justify-content: center; }
+  .sets .set-col { display: flex; flex-direction: column; gap: 3px; }
   .sets .ic { width: 34px; padding: 6px 2px; text-align: center; border: 1px solid var(--border); border-radius: 6px;
     font-size: 13px; font-weight: 700; background: var(--input-bg); color: var(--text); -moz-appearance: textfield; }
   .sets .ic::-webkit-outer-spin-button, .sets .ic::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .sets .ic:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-  .sets .sep { color: var(--text2); font-size: 10px; }
   .acc { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .btn { border: none; border-radius: 7px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
   .btn-ok { background: #16a34a; color: #fff; }
@@ -692,10 +694,12 @@ function badgeDes(club, x, y) {
   return `<span class="pj-badge mixta">MIXTA</span>`;
 }
 
+// Cada set es una columna: games del club de arriba / games del club de abajo
 function setsInputs(pref, s) {
   s = s || [0,0,0,0,0,0];
   const inp = (id, v) => `<input class="ic" type="number" min="0" max="30" id="${pref}-${id}" value="${v || ''}" placeholder="0">`;
-  return `<div class="sets">${inp('s1a',s[0])}<span class="sep">-</span>${inp('s1b',s[1])}<span class="sep">|</span>${inp('s2a',s[2])}<span class="sep">-</span>${inp('s2b',s[3])}<span class="sep">|</span>${inp('s3a',s[4])}<span class="sep">-</span>${inp('s3b',s[5])}</div>`;
+  const col = (a, b, va, vb, n) => `<div class="set-col" title="Set ${n}">${inp(a, va)}${inp(b, vb)}</div>`;
+  return `<div class="sets">${col('s1a','s1b',s[0],s[1],1)}${col('s2a','s2b',s[2],s[3],2)}${col('s3a','s3b',s[4],s[5],3)}</div>`;
 }
 function leerSets(pref) {
   const v = id => parseInt(document.getElementById(pref + '-' + id).value) || 0;

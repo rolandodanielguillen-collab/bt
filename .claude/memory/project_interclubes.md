@@ -27,6 +27,22 @@
     EN JUEGO ok, ambas páginas 200, php -l limpio, JS validado con node.
   - Slots por serie sigue = min(duplas inscriptas de ambos clubes).
   - El admin (con sesión) lo valida el usuario en UI.
+- ITERACIÓN 2 (2026-08-04, LIVE): 
+  1) Información (grafico-interclubes.inc.php): pestaña Sorteo muestra SOLO la
+     conformación de grupos (clubes numerados); posiciones/enfrentamientos/
+     resultados removidos (viven en Llaves). Se removió la carga de _ic_partidos
+     e icNombres/ic_n_duplas (código muerto).
+  2) Sets APILADOS (columna por set: arriba club izq, abajo club der) en admin
+     (setsInputs .set-col) y pública (.p-score .set inline-flex column).
+  3) CARGA PROGRESIVA set a set: ic_ganador_partido ahora exige 2 sets ganados
+     (mejor de 3) — partido con 1 set = sin ganador. guardar_partido acepta
+     parciales: sin ganador ⇒ en_juego='si' automático; con ganador ⇒ 'no'.
+     Guardar con 0 sets rechazado (usar Definir jugadores). Verificado que
+     ningún partido histórico cambia de estado (query GREATEST(w1,w2)<2 vacía).
+  - E2E por SQL en demo: 1 set → EN JUEGO + 1 columna apilada + PAREJA + sin
+    ganador; 2do set → 2 columnas + ✓ ganador + sin EN JUEGO. Fila test borrada.
+  - OJO: el usuario borró TODOS los partidos del demo ev16 probando el admin —
+    _ic_partidos quedó en 0 para ev16; playground limpio, no es bug.
 
 ## CIERRE 2026-08-03 — probado y aprobado por el usuario
 Badges PAREJA 1/2, definidor del 3er partido, edición de inscripciones con
