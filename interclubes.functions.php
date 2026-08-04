@@ -155,11 +155,10 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
 }
 
 /**
- * Posiciones de un grupo.
- * $clubes: [id_club => nombre] en el grupo. $slotsPorCruce: [clave "menor-mayor" => slots].
- * $partidos: filas _ic_partidos del grupo. Devuelve lista ordenada de stats por club.
+ * Acumula stats (series/partidos/sets/games/pts) para un conjunto de clubes.
+ * Usada por las posiciones y por la mini-liga del confronto directo.
  */
-function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): array {
+function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
     $st = [];
     foreach ($clubes as $id => $nombre) {
         $st[$id] = ['id_club' => $id, 'club' => $nombre, 'sj' => 0, 'sg' => 0, 'sp' => 0,
@@ -193,10 +192,43 @@ function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): ar
             else                 { $st[$b]['sg']++; $st[$b]['pts']++; $st[$a]['sp']++; }
         }
     }
+    return $st;
+}
+
+/**
+ * Posiciones de un grupo. $clubes: [id_club => nombre] EN ORDEN DE SORTEO.
+ * Criterio: pts → CONFRONTO DIRECTO entre los empatados (mini-liga: pts,
+ * dif. partidos, dif. sets, dif. games solo entre ellos) → diferencias
+ * globales → posición del sorteo (último recurso en empates circulares
+ * perfectos, ej. A>B, B>C, C>A con todos los marcadores iguales).
+ */
+function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): array {
+    $st = ic_stats($clubes, $partidos, $slotsPorCruce);
+    $ordenSorteo = array_flip(array_keys($clubes));
     $lista = array_values($st);
-    usort($lista, function ($x, $y) {
-        return [$y['pts'], $y['pg'] - $y['pp'], $y['setsF'] - $y['setsC'], $y['gamesF'] - $y['gamesC']]
-           <=> [$x['pts'], $x['pg'] - $x['pp'], $x['setsF'] - $x['setsC'], $x['gamesF'] - $x['gamesC']];
-    });
-    return $lista;
+    usort($lista, fn($x, $y) => $y['pts'] <=> $x['pts']);
+    $out = [];
+    for ($i = 0, $n = count($lista); $i < $n; ) {
+        $j = $i;
+        while ($j < $n && $lista[$j]['pts'] === $lista[$i]['pts']) $j++;
+        $empatados = array_slice($lista, $i, $j - $i);
+        if (count($empatados) > 1) {
+            $ids = array_column($empatados, 'id_club');
+            $mini = ic_stats(
+                array_intersect_key($clubes, array_flip($ids)),
+                array_values(array_filter($partidos, fn($m) =>
+                    in_array((int)$m['club1'], $ids, true) && in_array((int)$m['club2'], $ids, true))),
+                $slotsPorCruce);
+            $key = function ($c) use ($mini, $ordenSorteo) {
+                $m = $mini[$c['id_club']];
+                return [$m['pts'], $m['pg'] - $m['pp'], $m['setsF'] - $m['setsC'], $m['gamesF'] - $m['gamesC'],
+                        $c['pg'] - $c['pp'], $c['setsF'] - $c['setsC'], $c['gamesF'] - $c['gamesC'],
+                        -($ordenSorteo[$c['id_club']] ?? 99)];
+            };
+            usort($empatados, fn($x, $y) => $key($y) <=> $key($x));
+        }
+        $out = array_merge($out, $empatados);
+        $i = $j;
+    }
+    return $out;
 }

@@ -633,8 +633,6 @@ if (isset($_GET['action'])) {
       <div class="sub">Los jugadores de cada partido se eligen al cargarlo · serie 1-1 → desempate · las llaves avanzan solas</div>
     </div>
     <div class="der">
-      <a class="lk" href="/interclubes_sorteo.php?evento=<?= $idEvento ?>">🎲 Sorteo</a>
-      <a class="lk" href="/tvt_admin_v2.php">← Admin</a>
       <button class="theme-btn" onclick="toggleTheme()" title="Cambiar tema">◐</button>
     </div>
   </div>
