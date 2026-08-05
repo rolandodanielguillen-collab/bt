@@ -161,11 +161,16 @@ function ic_nombre($n) {
 
             <!-- Columna izquierda: detalles + cronograma -->
             <div class="lg:col-span-1 space-y-4">
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                    <h2 class="text-lg font-bold text-gray-900 mb-3 flex items-center">
-                        <i class="fa-solid fa-circle-info mr-2 text-blue-600"></i>
-                        DETALLES
-                    </h2>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <button class="accordion-button w-full flex justify-between items-center p-4 focus:outline-none" onclick="toggleAccordion(this)">
+                        <span class="text-lg font-bold text-gray-900 flex items-center">
+                            <i class="fa-solid fa-circle-info mr-2 text-blue-600"></i>
+                            DETALLES
+                        </span>
+                        <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div class="accordion-content">
+                    <div class="px-4 pb-4">
                     <div class="space-y-2 text-sm">
                         <div class="flex items-start">
                             <i class="fa-regular fa-calendar-days mr-2 text-gray-500 w-4 mt-0.5"></i>
@@ -197,10 +202,13 @@ function ic_nombre($n) {
                         </div>
                         <a href="<?php echo htmlspecialchars($cronoImgUrl); ?>" target="_blank" rel="noopener" title="Ver cronograma completo">
                             <img src="<?php echo htmlspecialchars($cronoImgUrl); ?>" alt="Cronograma"
-                                 class="w-full h-auto rounded-lg border border-gray-200 hover:opacity-90 transition">
+                                 class="w-full h-auto rounded-lg border border-gray-200 hover:opacity-90 transition"
+                                 onload="const c=this.closest('.accordion-content'); if (c && c.style.maxHeight) c.style.maxHeight = c.scrollHeight + 'px';">
                         </a>
                     </div>
                     <?php endif; ?>
+                    </div>
+                    </div>
                 </div>
             </div>
 
