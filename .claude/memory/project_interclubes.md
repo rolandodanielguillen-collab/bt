@@ -409,3 +409,12 @@ Implementación:
 - Fase futura: sorteo público con carga manual (club→grupo/posición en vivo) +
   enfrentamientos club vs club (cada cruce expande a partidos por categoría).
 - El usuario crea la categoría SENIOR desde el admin cuando arme el evento real.
+
+## 2026-08-05: card DETALLES colapsable en fixture (LIVE, commit 65edfa3)
+Pedido: en grafico-interclubes la info (DETALLES + cronograma) colapsable,
+colapsada por defecto. Hecho reutilizando toggleAccordion existente: el h2
+pasó a button.accordion-button con chevron, contenido en .accordion-content.
+GOTCHA cubierto: onload de la imagen del cronograma refresca maxHeight si el
+acordeón está abierto (si no, la imagen quedaba cortada al cargar lenta).
+Deploy: backup .bak-20260805-acordeon + scp /tmp + php -l + cp (receta de siempre).
+Verificado en vivo ev16 demo: colapsado/abierto desktop + móvil 375.
