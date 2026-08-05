@@ -418,3 +418,11 @@ GOTCHA cubierto: onload de la imagen del cronograma refresca maxHeight si el
 acordeón está abierto (si no, la imagen quedaba cortada al cargar lenta).
 Deploy: backup .bak-20260805-acordeon + scp /tmp + php -l + cp (receta de siempre).
 Verificado en vivo ev16 demo: colapsado/abierto desktop + móvil 375.
+
+## 2026-08-05 (2): SORTEO a card colapsable propia (LIVE)
+Sorteo salió de los pills de INSCRIPTOS → card colapsable (colapsada) entre
+DETALLES e INSCRIPTOS, columna izquierda. Pills quedan Por clubes (default) /
+Por categorías; vistaIC sin 'sorteo'. Grupos en grid-cols-1 (columna angosta).
+GOTCHA anidados: toggleAccordion ahora agranda max-height de ancestros
+.accordion-content abiertos (con overshoot) — sin eso las categorías del
+sorteo quedaban recortadas dentro de la card. Backup VPS .bak-20260805-sorteo.
