@@ -157,10 +157,10 @@ function ic_nombre($n) {
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
-            <!-- Columna izquierda: detalles + cronograma -->
-            <div class="lg:col-span-1 space-y-4">
+            <!-- Columna izquierda: detalles + cronograma + sorteo -->
+            <div class="lg:col-span-2 space-y-4">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                     <button class="accordion-button w-full flex justify-between items-center p-4 focus:outline-none" onclick="toggleAccordion(this)">
                         <span class="text-lg font-bold text-gray-900 flex items-center">
@@ -276,7 +276,7 @@ function ic_nombre($n) {
             </div>
 
             <!-- Columna derecha: inscriptos -->
-            <div class="lg:col-span-2">
+            <div class="lg:col-span-3">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                         <h2 class="text-lg font-bold text-gray-900 flex items-center">
