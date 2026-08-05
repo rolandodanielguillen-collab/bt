@@ -70,6 +70,8 @@ body{font-family:'DM Sans','Segoe UI',system-ui,sans-serif;background:#0f1117;co
 <?php exit; endif;
 $adminUser = $_SESSION['admin_user'];
 $adminTipo = $_SESSION['admin_tipo'];
+// Los clientes trabajan en el cargador (solo sus eventos), no en el admin completo
+if ($adminTipo !== 'superadmin') { header('Location: cargador.php'); exit; }
 ?>
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">

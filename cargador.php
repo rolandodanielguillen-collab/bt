@@ -229,9 +229,9 @@ $adminUser = $_SESSION['admin_user'];
 $adminTipo = $_SESSION['admin_tipo'];
 
 if ($adminTipo === 'superadmin') {
-    $rEv = $mysqli2->query("SELECT id, evento, fecha, estado FROM _p_eventos ORDER BY id DESC");
+    $rEv = $mysqli2->query("SELECT id, evento, fecha, estado, id_tipo_evento FROM _p_eventos ORDER BY id DESC");
 } else {
-    $rEv = $mysqli2->query("SELECT e.id, e.evento, e.fecha, e.estado
+    $rEv = $mysqli2->query("SELECT e.id, e.evento, e.fecha, e.estado, e.id_tipo_evento
         FROM _p_eventos e
         INNER JOIN _admin_evento ae ON ae.id_evento = e.id
         WHERE ae.id_admin = $adminId
@@ -397,7 +397,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <?php else:?>
       <div class="ev-grid">
       <?php foreach($eventos as $ev):?>
-        <div class="ev-card" onclick="selectEvento(<?=$ev['id']?>,'<?=addslashes(htmlspecialchars($ev['evento'],ENT_QUOTES))?>')">
+        <?php // Interclubes (tipo 5) se carga en interclubes_resultados.php, no con el flujo TVT ?>
+        <div class="ev-card" onclick="<?=((int)$ev['id_tipo_evento']===5)
+            ? "window.location.href='interclubes_resultados.php?evento={$ev['id']}'"
+            : "selectEvento({$ev['id']},'".addslashes(htmlspecialchars($ev['evento'],ENT_QUOTES))."')"?>">
           <div class="ev-name"><?=htmlspecialchars($ev['evento'])?></div>
           <div class="ev-meta">
             <?=$ev['fecha']?> &nbsp;
