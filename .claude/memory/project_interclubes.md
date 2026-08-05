@@ -1,5 +1,27 @@
 # Interclubes — Nuevo sistema de competencia (2026-08-01)
 
+## FIX 2026-08-05 — admin cliente ASO + evento 15 (COMPLETO)
+ASO (cliente, id 65) tenía asignado ev15 en _admin_evento pero al loguearse
+en tvt_admin_v2.php veía el admin COMPLETO: tvt_admin_v2 nunca restringió por
+tipo. Fix (commit dac29c9, deployado con .bak-20260805, verificado con curl
++ sesión real de ASO):
+- tvt_admin_v2.php: tipo!=superadmin → redirect a cargador.php.
+- cargador.php: evento id_tipo_evento=5 (interclubes) abre
+  interclubes_resultados.php?evento=N en vez del flujo TVT.
+Pendiente conocido (pre-existente, NO tocado): tvt_api.php y
+interclubes_resultados/sorteo solo exigen sesión, no validan que el admin
+tenga el evento asignado — un cliente con URL directa puede tocar otros
+eventos.
+
+## FIX 2026-08-05 — visualizar_en_llaves por categoría (COMPLETO)
+interclubes-llaves.php pública mostraba las 9 categorías con sorteo de
+_ic_sorteo ignorando el flag `visualizar_en_llaves` de
+_relacion_evento_categoria (ev15: solo 5 y 10 en 'si'). Fix: JOIN con
+_relacion_evento_categoria filtrando visualizar_en_llaves='si' y
+estado='activo' en la query de categorías de logica/interclubes.llaves.inc.php
+(el guard de $idCat existente cubre el acceso directo por URL a una oculta).
+Deployado al VPS (.bak-20260805), verificado en vivo, commit c84fa20 pusheado.
+
 ## CIERRE 2026-08-04 — modelo POR PARTIDO completo y LIVE (retomar acá)
 Sesión completa deployada y pusheada (commits 507691d..a96b296). El sistema
 quedó: elección de jugadores POR PARTIDO en admin (selects, definir/en
