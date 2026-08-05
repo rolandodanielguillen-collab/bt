@@ -210,37 +210,19 @@ function ic_nombre($n) {
                     </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Columna derecha: inscriptos -->
-            <div class="lg:col-span-2">
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                        <h2 class="text-lg font-bold text-gray-900 flex items-center">
-                            <i class="fa-solid fa-users mr-2 text-blue-600"></i>
-                            INSCRIPTOS
-                        </h2>
-                        <div class="flex bg-gray-100 rounded-lg p-1">
-                            <?php if ($haySorteo): ?>
-                            <button id="pillSorteo" onclick="vistaIC('sorteo')"
-                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md bg-blue-600 text-white shadow">
-                                <i class="fa-solid fa-shuffle mr-1"></i> Sorteo
-                            </button>
-                            <?php endif; ?>
-                            <button id="pillClubes" onclick="vistaIC('clubes')"
-                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md <?php echo $haySorteo ? 'text-gray-600 hover:text-gray-900' : 'bg-blue-600 text-white shadow'; ?>">
-                                <i class="fa-solid fa-building mr-1"></i> Por clubes
-                            </button>
-                            <button id="pillCats" onclick="vistaIC('cats')"
-                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md text-gray-600 hover:text-gray-900">
-                                <i class="fa-solid fa-tags mr-1"></i> Por categorías
-                            </button>
-                        </div>
-                    </div>
-
-                    <?php if ($haySorteo): ?>
-                    <!-- ══ VISTA SORTEO (categorías colapsadas; clic = clubes de cada grupo) ══ -->
-                    <div id="vistaSorteo" class="space-y-3">
+                <?php if ($haySorteo): ?>
+                <!-- ══ SORTEO (card colapsable; categorías con clubes de cada grupo) ══ -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <button class="accordion-button w-full flex justify-between items-center p-4 focus:outline-none" onclick="toggleAccordion(this)">
+                        <span class="text-lg font-bold text-gray-900 flex items-center">
+                            <i class="fa-solid fa-shuffle mr-2 text-blue-600"></i>
+                            SORTEO
+                        </span>
+                        <svg class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div class="accordion-content">
+                    <div class="px-4 pb-4 space-y-3">
                         <?php foreach ($sorteoIC as $nomCat => $catData):
                             $gruposCat = $catData['grupos'];
                             $totClubes = count($gruposCat[1] ?? []) + count($gruposCat[2] ?? []);
@@ -261,7 +243,7 @@ function ic_nombre($n) {
                                 </span>
                             </button>
                             <div class="accordion-content bg-gray-900">
-                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div class="p-3 grid grid-cols-1 gap-3">
                                     <?php foreach ([1, 2] as $g):
                                         $clubesG = $gruposCat[$g] ?? [];
                                     ?>
@@ -288,10 +270,33 @@ function ic_nombre($n) {
                         </div>
                         <?php endforeach; ?>
                     </div>
-                    <?php endif; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Columna derecha: inscriptos -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <h2 class="text-lg font-bold text-gray-900 flex items-center">
+                            <i class="fa-solid fa-users mr-2 text-blue-600"></i>
+                            INSCRIPTOS
+                        </h2>
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button id="pillClubes" onclick="vistaIC('clubes')"
+                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md bg-blue-600 text-white shadow">
+                                <i class="fa-solid fa-building mr-1"></i> Por clubes
+                            </button>
+                            <button id="pillCats" onclick="vistaIC('cats')"
+                                    class="pill-ic text-xs font-bold px-4 py-1.5 rounded-md text-gray-600 hover:text-gray-900">
+                                <i class="fa-solid fa-tags mr-1"></i> Por categorías
+                            </button>
+                        </div>
+                    </div>
 
                     <!-- ══ VISTA POR CLUBES ══ -->
-                    <div id="vistaClubes" class="space-y-3" <?php if ($haySorteo) echo 'style="display:none"'; ?>>
+                    <div id="vistaClubes" class="space-y-3">
                         <?php if (!$clubesIC): ?>
                             <p class="text-sm text-gray-500 italic py-4 text-center">Aún no hay clubes registrados.</p>
                         <?php endif; ?>
@@ -389,10 +394,17 @@ function ic_nombre($n) {
             } else {
                 content.style.maxHeight = null;
             }
+            // Acordeones anidados: agrandar los ancestros abiertos para que
+            // el contenido interno no quede recortado (sobra max-height, no molesta)
+            let p = content.parentElement && content.parentElement.closest('.accordion-content');
+            while (p) {
+                if (p.style.maxHeight) p.style.maxHeight = (p.scrollHeight + content.scrollHeight) + 'px';
+                p = p.parentElement && p.parentElement.closest('.accordion-content');
+            }
         }
         function vistaIC(cual) {
-            const vistas = { sorteo: 'vistaSorteo', llaves: 'vistaLlaves', clubes: 'vistaClubes', cats: 'vistaCats' };
-            const pills  = { sorteo: 'pillSorteo',  llaves: 'pillLlaves',  clubes: 'pillClubes', cats: 'pillCats' };
+            const vistas = { llaves: 'vistaLlaves', clubes: 'vistaClubes', cats: 'vistaCats' };
+            const pills  = { llaves: 'pillLlaves',  clubes: 'pillClubes', cats: 'pillCats' };
             const on  = ['bg-blue-600','text-white','shadow'];
             const off = ['text-gray-600'];
             for (const k in vistas) {
