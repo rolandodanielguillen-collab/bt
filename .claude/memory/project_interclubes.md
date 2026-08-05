@@ -426,3 +426,6 @@ Por categorías; vistaIC sin 'sorteo'. Grupos en grid-cols-1 (columna angosta).
 GOTCHA anidados: toggleAccordion ahora agranda max-height de ancestros
 .accordion-content abiertos (con overshoot) — sin eso las categorías del
 sorteo quedaban recortadas dentro de la card. Backup VPS .bak-20260805-sorteo.
+Ajuste posterior: columna izquierda lg:grid-cols-5 → col-span-2 (antes 1/3);
+los nombres de categorías del sorteo se leen completos en desktop. Móvil intacto.
+Backup VPS .bak-20260805-colancha.
