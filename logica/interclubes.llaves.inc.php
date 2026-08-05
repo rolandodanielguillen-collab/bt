@@ -32,6 +32,9 @@ $idEventos = (int)$rowEvento['id'];
 $st = $mysqli2->prepare(
     "SELECT s.id_categoria, COALESCE(cat.categoria,'?') AS categoria
        FROM _ic_sorteo s LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
+       JOIN _relacion_evento_categoria rec
+         ON rec.id_evento = s.id_evento AND rec.id_categoria = s.id_categoria
+        AND rec.estado = 'activo' AND rec.visualizar_en_llaves = 'si'
       WHERE s.id_evento = ? GROUP BY s.id_categoria ORDER BY cat.categoria ASC");
 $st->bind_param('i', $idEventos);
 $st->execute();
