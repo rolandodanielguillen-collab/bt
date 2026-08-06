@@ -8,7 +8,9 @@
  *   Partido 2 = dupla 2 vs dupla 2 (tantos como min(duplas A, duplas B)).
  * - Cada partido: 2 sets + 3er set de desempate si empatan.
  * - Serie empatada tras los partidos regulares → partido de DESEMPATE con dupla mezclada.
- * - Posiciones: 1 punto por serie ganada; desempate por dif. de partidos, sets y games.
+ *   El desempate vale ±1 al saldo de games (no suma sus games reales ni sets).
+ * - Posiciones: 1 punto por serie ganada; desempate por saldo de games; confronto
+ *   directo solo si persiste el empate; último recurso posición de sorteo.
  */
 
 // Sets ganados por cada lado en un partido (ignora sets no jugados 0-0)
@@ -172,10 +174,16 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
         [$s1, $s2, $g1, $g2] = ic_sets_partido($m);
         $gan = ic_ganador_partido($m);
         if ($gan === 0) continue;
-        $st[$c1]['setsF'] += $s1; $st[$c1]['setsC'] += $s2;
-        $st[$c2]['setsF'] += $s2; $st[$c2]['setsC'] += $s1;
-        $st[$c1]['gamesF'] += $g1; $st[$c1]['gamesC'] += $g2;
-        $st[$c2]['gamesF'] += $g2; $st[$c2]['gamesC'] += $g1;
+        if ((int)$m['es_desempate'] === 1) {
+            // Regla: el partido de desempate vale ±1 al saldo de games (no games reales ni sets)
+            $w = $gan === 1 ? $c1 : $c2; $l = $gan === 1 ? $c2 : $c1;
+            $st[$w]['gamesF']++; $st[$l]['gamesC']++;
+        } else {
+            $st[$c1]['setsF'] += $s1; $st[$c1]['setsC'] += $s2;
+            $st[$c2]['setsF'] += $s2; $st[$c2]['setsC'] += $s1;
+            $st[$c1]['gamesF'] += $g1; $st[$c1]['gamesC'] += $g2;
+            $st[$c2]['gamesF'] += $g2; $st[$c2]['gamesC'] += $g1;
+        }
         if ($gan === 1) { $st[$c1]['pg']++; $st[$c2]['pp']++; }
         else            { $st[$c2]['pg']++; $st[$c1]['pp']++; }
         $k = min($c1, $c2) . '-' . max($c1, $c2);
@@ -197,20 +205,21 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
 
 /**
  * Posiciones de un grupo. $clubes: [id_club => nombre] EN ORDEN DE SORTEO.
- * Criterio: pts → CONFRONTO DIRECTO entre los empatados (mini-liga: pts,
- * dif. partidos, dif. sets, dif. games solo entre ellos) → diferencias
- * globales → posición del sorteo (último recurso en empates circulares
- * perfectos, ej. A>B, B>C, C>A con todos los marcadores iguales).
+ * Criterio (reglamento 2026-08-05): pts → SALDO DE GAMES global (desempate
+ * vale ±1, ver ic_stats) → CONFRONTO DIRECTO entre los que sigan empatados
+ * (mini-liga: pts y saldo solo entre ellos) → posición del sorteo (último
+ * recurso en empates circulares perfectos).
  */
 function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): array {
     $st = ic_stats($clubes, $partidos, $slotsPorCruce);
     $ordenSorteo = array_flip(array_keys($clubes));
+    $saldo = fn($c) => $c['gamesF'] - $c['gamesC'];
     $lista = array_values($st);
-    usort($lista, fn($x, $y) => $y['pts'] <=> $x['pts']);
+    usort($lista, fn($x, $y) => [$y['pts'], $saldo($y)] <=> [$x['pts'], $saldo($x)]);
     $out = [];
     for ($i = 0, $n = count($lista); $i < $n; ) {
         $j = $i;
-        while ($j < $n && $lista[$j]['pts'] === $lista[$i]['pts']) $j++;
+        while ($j < $n && $lista[$j]['pts'] === $lista[$i]['pts'] && $saldo($lista[$j]) === $saldo($lista[$i])) $j++;
         $empatados = array_slice($lista, $i, $j - $i);
         if (count($empatados) > 1) {
             $ids = array_column($empatados, 'id_club');
@@ -219,11 +228,9 @@ function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): ar
                 array_values(array_filter($partidos, fn($m) =>
                     in_array((int)$m['club1'], $ids, true) && in_array((int)$m['club2'], $ids, true))),
                 $slotsPorCruce);
-            $key = function ($c) use ($mini, $ordenSorteo) {
+            $key = function ($c) use ($mini, $saldo, $ordenSorteo) {
                 $m = $mini[$c['id_club']];
-                return [$m['pts'], $m['pg'] - $m['pp'], $m['setsF'] - $m['setsC'], $m['gamesF'] - $m['gamesC'],
-                        $c['pg'] - $c['pp'], $c['setsF'] - $c['setsC'], $c['gamesF'] - $c['gamesC'],
-                        -($ordenSorteo[$c['id_club']] ?? 99)];
+                return [$m['pts'], $saldo($m), -($ordenSorteo[$c['id_club']] ?? 99)];
             };
             usort($empatados, fn($x, $y) => $key($y) <=> $key($x));
         }

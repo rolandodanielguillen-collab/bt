@@ -610,6 +610,9 @@ if (isset($_GET['action'])) {
   table.pos td { padding: 8px 6px; text-align: center; border-top: 1px solid var(--border); color: var(--text); }
   table.pos td.club { text-align: left; font-weight: 700; }
   table.pos tr.lider td { color: var(--win); }
+  table.pos td.saldo-pos { color: var(--win); font-weight: 700; }
+  table.pos td.saldo-neg { color: #ef4444; font-weight: 700; }
+  .pos-nota { font-size: 10px; color: var(--text2); padding: 8px 12px; border-top: 1px solid var(--border); }
   /* Bracket */
   .bracket-wrapper { overflow-x: auto; padding: 4px 0 12px; }
   .bracket-flex { display: flex; align-items: stretch; min-width: 560px; }
@@ -944,13 +947,16 @@ async function cargarEstado() {
     h += `</div>`;
     let filas = '';
     g.posiciones.forEach((p, i) => {
+      const saldo = p.gamesF - p.gamesC;
+      const clsSaldo = saldo > 0 ? 'saldo-pos' : (saldo < 0 ? 'saldo-neg' : '');
       filas += `<tr class="${i === 0 && p.pts > 0 ? 'lider' : ''}"><td class="club">${i+1}. ${UP(p.club)}</td>
-        <td>${p.sg}-${p.sp}</td><td>${p.pg}-${p.pp}</td><td>${p.setsF}-${p.setsC}</td><td><b>${p.pts}</b></td></tr>`;
+        <td>${p.sg}-${p.sp}</td><td class="${clsSaldo}">${saldo > 0 ? '+' : ''}${saldo}</td><td><b>${p.pts}</b></td></tr>`;
     });
     modales += `<div class="modal-clasif-overlay" id="modal-clasif-${g.grupo}" onclick="if(event.target===this)closeModalClasif('modal-clasif-${g.grupo}')">
       <div class="modal-clasif-box">
         <div class="modal-clasif-header"><span>Clasificación — Grupo ${g.grupo}</span><button onclick="closeModalClasif('modal-clasif-${g.grupo}')">&times;</button></div>
-        <table class="pos"><tr><th style="text-align:left;">Club</th><th>Series</th><th>Partidos</th><th>Sets</th><th>Pts</th></tr>${filas}</table>
+        <table class="pos"><tr><th style="text-align:left;">Club</th><th>Series</th><th>Games</th><th>Pts</th></tr>${filas}</table>
+        <div class="pos-nota">Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)</div>
       </div></div>`;
   });
   h += `</div>`;

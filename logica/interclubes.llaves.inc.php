@@ -279,6 +279,9 @@ if (isset($llaves['tercer'])) {
   table.pos td { padding: 8px 6px; text-align: center; border-top: 1px solid hsl(214,25%,90%); }
   table.pos td.club { text-align: left; font-weight: 700; }
   table.pos tr.lider td { background: #ecfdf5; }
+  table.pos td.saldo-pos { color: #059669; font-weight: 700; }
+  table.pos td.saldo-neg { color: #dc2626; font-weight: 700; }
+  .pos-nota { font-size: 10px; color: hsl(215,14%,50%); padding: 8px 12px; border-top: 1px solid hsl(214,25%,90%); }
   /* Podio escalonado: campeón, vice al medio y tercero al otro extremo,
      bloques oro/plata/bronce de altura decreciente apoyados en la base de la card */
   .podio { display: flex; align-items: flex-end; justify-content: center; gap: 10px; max-width: 480px;
@@ -442,17 +445,19 @@ if (isset($llaves['tercer'])) {
             <button onclick="closeModalClasif('modal-clasif-<?php echo $g; ?>')">&times;</button>
           </div>
           <table class="pos">
-            <tr><th style="text-align:left;">Club</th><th>Series</th><th>Partidos</th><th>Sets</th><th>Pts</th></tr>
-            <?php foreach ($posiciones as $ip => $p): ?>
+            <tr><th style="text-align:left;">Club</th><th>Series</th><th>Games</th><th>Pts</th></tr>
+            <?php foreach ($posiciones as $ip => $p):
+                $saldoG = $p['gamesF'] - $p['gamesC'];
+                $clsSaldo = $saldoG > 0 ? 'saldo-pos' : ($saldoG < 0 ? 'saldo-neg' : ''); ?>
             <tr class="<?php echo $ip === 0 && $p['pts'] > 0 ? 'lider' : ''; ?>">
               <td class="club"><?php echo ($ip + 1) . '. ' . icn($p['club']); ?></td>
               <td><?php echo $p['sg']; ?>-<?php echo $p['sp']; ?></td>
-              <td><?php echo $p['pg']; ?>-<?php echo $p['pp']; ?></td>
-              <td><?php echo $p['setsF']; ?>-<?php echo $p['setsC']; ?></td>
+              <td class="<?php echo $clsSaldo; ?>"><?php echo ($saldoG > 0 ? '+' : '') . $saldoG; ?></td>
               <td><b><?php echo $p['pts']; ?></b></td>
             </tr>
             <?php endforeach; ?>
           </table>
+          <div class="pos-nota">Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)</div>
         </div>
       </div>
       <?php endforeach; ?>
