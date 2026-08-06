@@ -66,7 +66,7 @@ if ($idCat) {
     while ($r = $res->fetch_assoc()) { $partidos[] = $r; foreach (['ci1_a','ci1_b','ci2_a','ci2_b'] as $k) $cis[$r[$k]] = 1; }
     if ($cis) {
         $in = "'" . implode("','", array_map(fn($c) => $mysqli2->real_escape_string($c), array_keys($cis))) . "'";
-        $r2 = $mysqli2->query("SELECT ci, TRIM(CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,''))) n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
+        $r2 = $mysqli2->query("SELECT ci, " . ic_sql_nombre_corto() . " n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
         while ($x = $r2->fetch_assoc()) $nombres[trim($x['ci'])] = $x['n'];
     }
     foreach ($mapaTodos as $idCl => $n) $duplas[$idCl] = ic_duplas($mysqli2, $idEventos, $idCat, $idCl);

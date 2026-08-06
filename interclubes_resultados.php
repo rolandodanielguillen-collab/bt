@@ -84,7 +84,7 @@ if (isset($_GET['action'])) {
         $nombres = [];
         if ($cis) {
             $in = "'" . implode("','", array_map(fn($c) => $mysqli2->real_escape_string($c), array_keys($cis))) . "'";
-            $r2 = $mysqli2->query("SELECT ci, TRIM(CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,''))) n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
+            $r2 = $mysqli2->query("SELECT ci, " . ic_sql_nombre_corto() . " n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
             while ($x = $r2->fetch_assoc()) $nombres[trim($x['ci'])] = $x['n'];
         }
 
@@ -100,7 +100,7 @@ if (isset($_GET['action'])) {
         }
         // Suplentes: elegibles para el desempate
         $st = $mysqli2->prepare(
-            "SELECT s.id_club, s.ci, TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS n
+            "SELECT s.id_club, s.ci, " . ic_sql_nombre_corto('u.') . " AS n
                FROM _ic_suplentes s LEFT JOIN _p_usuarios u ON TRIM(u.ci) = TRIM(s.ci)
               WHERE s.id_evento = ? AND s.id_categoria = ?");
         $st->bind_param('ii', $idEvento, $idCat);

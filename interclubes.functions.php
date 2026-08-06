@@ -13,6 +13,13 @@
  *   directo solo si persiste el empate; último recurso posición de sorteo.
  */
 
+// Nombre para mostrar: primer nombre + primer apellido (pedido 2026-08-05).
+// $t: alias de tabla con punto ('u1.') o '' si la query no usa alias.
+function ic_sql_nombre_corto(string $t = ''): string {
+    return "TRIM(CONCAT(SUBSTRING_INDEX(TRIM(COALESCE({$t}nombre,'')),' ',1),' '," .
+           "SUBSTRING_INDEX(TRIM(COALESCE({$t}apellido,'')),' ',1)))";
+}
+
 // Sets ganados por cada lado en un partido (ignora sets no jugados 0-0)
 function ic_sets_partido(array $m): array {
     $s1 = $s2 = $g1 = $g2 = 0;
@@ -39,8 +46,8 @@ function ic_ganador_partido(array $m): int {
 function ic_duplas(mysqli $db, int $idEvento, int $idCat, int $idClub): array {
     $st = $db->prepare(
         "SELECT i.ci, i.ci_dupla,
-                TRIM(CONCAT(COALESCE(u1.nombre,''),' ',COALESCE(u1.apellido,''))) AS j1,
-                TRIM(CONCAT(COALESCE(u2.nombre,''),' ',COALESCE(u2.apellido,''))) AS j2
+                " . ic_sql_nombre_corto('u1.') . " AS j1,
+                " . ic_sql_nombre_corto('u2.') . " AS j2
            FROM _p_incripciones i
            LEFT JOIN _p_usuarios u1 ON TRIM(u1.ci) = TRIM(i.ci)
            LEFT JOIN _p_usuarios u2 ON TRIM(u2.ci) = TRIM(i.ci_dupla)
