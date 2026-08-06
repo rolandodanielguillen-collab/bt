@@ -110,7 +110,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'buscar_ci') {
 // Categorías habilitadas del evento
 function categoriasEvento($mysqli2, $idEvento) {
     $st = $mysqli2->prepare(
-        "SELECT rec.id_categoria, cat.categoria, rec.sexo, rec.max_parejas
+        "SELECT rec.id_categoria, cat.categoria, rec.sexo, rec.max_parejas, rec.cupo
            FROM _relacion_evento_categoria rec
            JOIN _p_categorias cat ON cat.id = rec.id_categoria
           WHERE rec.id_evento = ? AND rec.estado = 'activo'
@@ -204,6 +204,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!isset($cats[$idCat])) {
             $flash = ['err', 'Categoría inválida para este torneo.'];
+        } elseif (($cats[$idCat]['cupo'] ?? '') === 'lleno') {
+            $flash = ['err', 'La inscripción de ' . $cats[$idCat]['categoria'] . ' está cerrada.'];
         } elseif ((int)$ci1 < 100000 || (int)$ci2 < 100000) {
             $flash = ['err', 'Cédula inválida. Verificá los datos.'];
         } elseif ($ci1 === $ci2) {
@@ -267,10 +269,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($accion === 'quitar_pareja') {
+        $cats  = categoriasEvento($mysqli2, $idEvento);
         $idCat = (int)($_POST['categoria'] ?? 0);
         $ci1   = preg_replace('/[^0-9]/', '', $_POST['ci1'] ?? '');
         $ci2   = preg_replace('/[^0-9]/', '', $_POST['ci2'] ?? '');
-        if ($idCat && $ci1 !== '' && $ci2 !== '') {
+        if (($cats[$idCat]['cupo'] ?? '') === 'lleno') {
+            $flash = ['err', 'La inscripción de esa categoría está cerrada.'];
+        } elseif ($idCat && $ci1 !== '' && $ci2 !== '') {
             $st = $mysqli2->prepare(
                 "DELETE FROM _p_incripciones
                   WHERE id_club = ? AND id_evento = ? AND id_categoria = ? AND estado <> 'bloqueado'
@@ -291,6 +296,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!isset($cats[$idCat])) {
             $flash = ['err', 'Categoría inválida para este torneo.'];
+        } elseif (($cats[$idCat]['cupo'] ?? '') === 'lleno') {
+            $flash = ['err', 'La inscripción de ' . $cats[$idCat]['categoria'] . ' está cerrada.'];
         } elseif ((int)$ci < 100000) {
             $flash = ['err', 'Cédula inválida. Verificá los datos.'];
         } else {
@@ -335,8 +342,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($accion === 'quitar_suplente') {
+        $cats  = categoriasEvento($mysqli2, $idEvento);
         $idCat = (int)($_POST['categoria'] ?? 0);
-        if ($idCat) {
+        if (($cats[$idCat]['cupo'] ?? '') === 'lleno') {
+            $flash = ['err', 'La inscripción de esa categoría está cerrada.'];
+        } elseif ($idCat) {
             $st = $mysqli2->prepare(
                 "DELETE FROM _ic_suplentes WHERE id_club = ? AND id_evento = ? AND id_categoria = ?");
             $st->bind_param('iii', $idClub, $idEvento, $idCat);
@@ -469,13 +479,14 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
       $lp = $parejas[$idCat] ?? [];
       $n  = count($lp);
       $maxCat = max(1, (int)($cat['max_parejas'] ?? MAX_PAREJAS_POR_CAT));
-      $puedeAgregar = $abierta && $n < $maxCat;
+      $catCerrada = ($cat['cupo'] ?? '') === 'lleno';
+      $puedeAgregar = $abierta && !$catCerrada && $n < $maxCat;
       $sup = $suplentes[$idCat] ?? null;
   ?>
   <div class="cat">
     <div class="cat-h">
       <span class="nombre"><?= htmlspecialchars($cat['categoria']) ?></span>
-      <span class="cupo <?= $n >= $maxCat ? 'full' : '' ?>"><?= $n ?>/<?= $maxCat ?> parejas</span>
+      <span class="cupo <?= $n >= $maxCat ? 'full' : '' ?>"><?= $n ?>/<?= $maxCat ?> parejas<?= $catCerrada ? ' · inscripción cerrada' : '' ?></span>
     </div>
 
     <?php if (!$n): ?>
@@ -489,7 +500,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
         <?= htmlspecialchars(trim($p['j1']) ?: 'CI ' . maskCi($p['ci'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci'])) ?>)</span><br>
         <?= htmlspecialchars(trim($p['j2']) ?: 'CI ' . maskCi($p['ci_dupla'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($p['ci_dupla'])) ?>)</span>
       </div>
-      <?php if ($abierta): ?>
+      <?php if ($abierta && !$catCerrada): ?>
       <form method="post" onsubmit="return confirm('¿Quitar esta pareja?')">
         <input type="hidden" name="accion" value="quitar_pareja">
         <input type="hidden" name="categoria" value="<?= $idCat ?>">
@@ -507,7 +518,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
         <span class="ci-chico" style="font-weight:700;">Suplente</span><br>
         <?= htmlspecialchars(trim($sup['jug']) ?: 'CI ' . maskCi($sup['ci'])) ?> <span class="ci-chico">(<?= htmlspecialchars(maskCi($sup['ci'])) ?>)</span>
       </div>
-      <?php if ($abierta): ?>
+      <?php if ($abierta && !$catCerrada): ?>
       <form method="post" onsubmit="return confirm('¿Quitar el suplente?')">
         <input type="hidden" name="accion" value="quitar_suplente">
         <input type="hidden" name="categoria" value="<?= $idCat ?>">
@@ -556,7 +567,7 @@ $cierreFmt = ($fcierre && $fcierre !== '0000-00-00') ? date('d/m/Y', strtotime($
     </form>
     <?php endif; ?>
 
-    <?php if ($abierta && !$sup): ?>
+    <?php if ($abierta && !$catCerrada && !$sup): ?>
     <button type="button" class="btn btn-sup" onclick="toggleForm('form-sup-<?= $idCat ?>')">+ Suplente (opcional)</button>
     <form method="post" class="form-pareja" id="form-sup-<?= $idCat ?>">
       <input type="hidden" name="accion" value="agregar_suplente">
