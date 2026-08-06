@@ -451,3 +451,25 @@ sorteo quedaban recortadas dentro de la card. Backup VPS .bak-20260805-sorteo.
 Ajuste posterior: columna izquierda lg:grid-cols-5 → col-span-2 (antes 1/3);
 los nombres de categorías del sorteo se leen completos en desktop. Móvil intacto.
 Backup VPS .bak-20260805-colancha.
+
+## 2026-08-06: link de inscripción "no independiente" — falsa pista, era la fecha
+Reporte: al ocultar categorías del público, los clubes no podían cargar parejas
+en interclubes.php?token=. Diagnóstico: el form NUNCA filtró por
+visualizar_en_llaves (solo rec.estado='activo'); las 10 cats del ev15 activas.
+Causa real: fecha_fin_inscripcion=2026-08-05 venció → $abierta=false → cero
+botones "+ Agregar pareja" en TODAS las categorías (coincidió en el día con el
+fix de visibilidad c84fa20, correlación no causa).
+Fix: UPDATE _p_eventos SET fecha_fin_inscripcion=NULL WHERE id=15 (DB only,
+sin cambios de código). Verificado en vivo: 8 botones agregar (E masc/fem al
+tope), sin banner de cerrada. Para cerrar inscripción de verdad: volver a
+setear la fecha en el admin.
+
+## 2026-08-06: cierre de inscripción POR CATEGORÍA — LIVE (commit 6c3b63a)
+El usuario eligió el toggle manual (opción cupo) sobre fecha por categoría.
+interclubes.php?token= ahora respeta _relacion_evento_categoria.cupo:
+'lleno' = categoría cerrada (sin agregar/quitar pareja ni suplente, POST
+validado server-side, etiqueta "inscripción cerrada" en el header de la card).
+El botón Lleno/Disponible ya existía en el admin (lista de categorías del
+evento) — cero UI nueva. Probado en vivo con cat 131 (C MASC) lleno→disponible.
+Backup VPS: interclubes.php.bak-20260806. Categorías 2/2 siguen permitiendo
+suplente (eso es tope de parejas, no cierre).
