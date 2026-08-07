@@ -13,6 +13,7 @@
 session_start();
 include_once "db/conection.inc.php";
 require_once __DIR__ . '/interclubes.functions.php';
+require_once __DIR__ . '/bt_log.inc.php';
 
 if (!isset($_SESSION['admin_id'])) {
     echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Resultados Interclubes</title></head>'
@@ -32,6 +33,7 @@ if (!$evento) { http_response_code(404); exit('Evento interclubes no encontrado'
 if (isset($_GET['action'])) {
     header('Content-Type: application/json; charset=utf-8');
     $action = $_GET['action'];
+    bt_log($mysqli2, (string)($_SESSION['admin_user'] ?? 'admin'), 'resultados', $action, $_GET);
 
     // Categorías que ya tienen sorteo cargado
     if ($action === 'categorias') {

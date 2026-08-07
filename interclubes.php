@@ -10,6 +10,7 @@
  */
 session_start();
 include_once "db/conection.inc.php";
+require_once __DIR__ . '/bt_log.inc.php';
 
 const MAX_PAREJAS_POR_CAT = 2;
 
@@ -192,6 +193,8 @@ $flash = null; // ['ok'|'err', mensaje]
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
+    // El actor acá no es un admin: es el dueño del club entrando con su token.
+    bt_log($mysqli2, 'club: ' . $club['club'], 'form-club', $accion, $_POST);
 
     if (!$abierta) {
         $flash = ['err', 'La inscripción está cerrada.'];

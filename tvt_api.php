@@ -43,9 +43,13 @@ function intGet($k, $d = 0) { return isset($_GET[$k]) ? abs((int)$_GET[$k]) : $d
 function strGet($k, $d = '') { return isset($_GET[$k]) ? trim($_GET[$k]) : (isset($_POST[$k]) ? trim($_POST[$k]) : $d); }
 
 require_once __DIR__ . '/propagacion.functions.php';
+require_once __DIR__ . '/bt_log.inc.php';
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
+
+// Log de acciones: un solo punto para las ~50 acciones del admin (solo escrituras).
+bt_log($mysqli2, (string)($_SESSION['admin_user'] ?? 'admin'), 'admin', $action, $_GET + $_POST);
 
 // ══════════════════════════════════════════════════════════════════
 // ACTION: kpis — KPIs del dashboard principal
@@ -1259,6 +1263,43 @@ if ($action === 'get_jugador') {
     $r = $mysqli2->query("SELECT * FROM _p_usuarios WHERE id = {$id}");
     if (!$r || $r->num_rows == 0) respErr('Jugador no encontrado');
     resp(['success' => true, 'jugador' => $r->fetch_assoc()]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ACTION: log — Registro de acciones (SOLO superadmin)
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'log') {
+    if (($_SESSION['admin_tipo'] ?? '') !== 'superadmin') respErr('Solo el superadmin puede ver el log');
+
+    $page  = max(1, intGet('page', 1));
+    $porPg = 50;
+    $off   = ($page - 1) * $porPg;
+
+    // Un solo buscador: cae sobre actor, acción y detalle a la vez.
+    $where = [];
+    $q = trim(strGet('q'));
+    if ($q !== '') {
+        $qe = $mysqli2->real_escape_string($q);
+        $where[] = "(actor LIKE '%{$qe}%' OR accion LIKE '%{$qe}%' OR detalle LIKE '%{$qe}%' OR origen LIKE '%{$qe}%')";
+    }
+    $desde = trim(strGet('desde'));
+    $hasta = trim(strGet('hasta'));
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) $where[] = "fecha >= '{$desde} 00:00:00'";
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) $where[] = "fecha <= '{$hasta} 23:59:59'";
+    $origen = trim(strGet('origen'));
+    if (in_array($origen, ['admin', 'resultados', 'sorteo', 'form-club'], true)) {
+        $where[] = "origen = '{$origen}'";
+    }
+    $sqlW = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+    $total = (int)$mysqli2->query("SELECT COUNT(*) c FROM _bt_log {$sqlW}")->fetch_assoc()['c'];
+    $rows = [];
+    $res = $mysqli2->query("SELECT id, fecha, actor, origen, accion, detalle, ip
+                              FROM _bt_log {$sqlW} ORDER BY id DESC LIMIT {$porPg} OFFSET {$off}");
+    while ($r = $res->fetch_assoc()) $rows[] = $r;
+
+    resp(['success' => true, 'registros' => $rows, 'total' => $total,
+          'pages' => (int)ceil($total / $porPg), 'page' => $page]);
 }
 
 // ══════════════════════════════════════════════════════════════════

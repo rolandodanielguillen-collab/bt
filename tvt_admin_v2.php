@@ -346,6 +346,9 @@ tr:hover td{background:var(--bg-hover)}
     <div class="nav-l">Administración</div>
     <div class="nav-i" onclick="goPage('admins')"><i class="fas fa-user-shield"></i> Administradores</div>
     <div class="nav-i" onclick="goPage('puntajes')"><i class="fas fa-star"></i> Puntajes</div>
+    <?php if ($adminTipo === 'superadmin'): ?>
+    <div class="nav-i" onclick="goPage('log')"><i class="fas fa-list-check"></i> Log</div>
+    <?php endif; ?>
   </div>
   <div class="nav-s">
     <div class="nav-l">Sistema</div>
@@ -685,6 +688,38 @@ tr:hover td{background:var(--bg-hover)}
 
       <div id="pjContainer"></div>
     </div>
+
+    <?php if ($adminTipo === 'superadmin'): ?>
+    <div class="page" id="pg-log">
+      <div class="pg-row">
+        <div><div class="pg-title">Log de acciones</div><div class="pg-sub">Todo lo que se creó, editó o borró desde el admin, el cargador de resultados, el sorteo y los formularios de los clubes</div></div>
+      </div>
+      <div class="fbar">
+        <input class="fs" type="text" id="fLogQ" placeholder="Buscar: nombre, CI, club, acción…" style="min-width:240px;" onkeydown="if(event.key==='Enter')loadLog(1)">
+        <select class="fs" id="fLogOrigen" onchange="loadLog(1)">
+          <option value="">Todos los orígenes</option>
+          <option value="admin">Admin</option>
+          <option value="resultados">Resultados</option>
+          <option value="sorteo">Sorteo</option>
+          <option value="form-club">Formulario del club</option>
+        </select>
+        <input class="fs" type="date" id="fLogDesde" onchange="loadLog(1)" title="Desde">
+        <input class="fs" type="date" id="fLogHasta" onchange="loadLog(1)" title="Hasta">
+        <button class="btn btn-pr btn-sm" onclick="loadLog(1)"><i class="fas fa-search"></i> Buscar</button>
+        <button class="btn btn-gh btn-sm" onclick="document.getElementById('fLogQ').value='';document.getElementById('fLogOrigen').value='';document.getElementById('fLogDesde').value='';document.getElementById('fLogHasta').value='';loadLog(1)">Limpiar</button>
+      </div>
+      <div class="tbl-card">
+        <div class="tbl-hdr"><span class="tbl-title" id="logCount">Registros</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="white-space:nowrap;">Fecha</th><th>Quién</th><th>Origen</th><th>Acción</th><th>Detalle</th></tr></thead>
+            <tbody id="tbLog"></tbody>
+          </table>
+        </div>
+        <div id="logPag" style="padding:12px 16px;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <?php endif; ?>
 
   </div><!-- /content -->
 </div><!-- /main -->
@@ -1187,7 +1222,7 @@ function goPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('pg-'+id).classList.add('active');
   document.querySelectorAll('.nav-i').forEach(n=>n.classList.remove('active'));
-  const titles={dashboard:'Dashboard',eventos:'Eventos',inscripciones:'Inscripciones',categorias:'Categorías',jugadores:'Jugadores',resultados:'Resultados',horarios:'Horarios',ranking:'Ranking',admins:'Administradores',puntajes:'Puntajes'};
+  const titles={dashboard:'Dashboard',eventos:'Eventos',inscripciones:'Inscripciones',categorias:'Categorías',jugadores:'Jugadores',resultados:'Resultados',horarios:'Horarios',ranking:'Ranking',admins:'Administradores',puntajes:'Puntajes',log:'Log de acciones'};
   document.getElementById('topTitle').textContent=titles[id]||id;
   event&&event.target&&document.querySelectorAll('.nav-i').forEach(n=>{if(n.textContent.trim().toLowerCase().includes(id.substring(0,5)))n.classList.add('active')});
   if(window.innerWidth<1024){document.getElementById('sb').classList.remove('open');document.getElementById('sbOv').classList.remove('show')}
@@ -1195,6 +1230,45 @@ function goPage(id){
   if(id==='admins') loadAdmins();
   if(id==='puntajes') loadPuntajes();
   if(id==='jugadores') loadJugadores(1);
+  if(id==='log') loadLog(1);
+}
+
+// ═══ LOG DE ACCIONES (solo superadmin) ═══
+async function loadLog(page){
+  if(!page) page=1;
+  const r = await api({action:'log', page,
+    q: document.getElementById('fLogQ').value.trim(),
+    origen: document.getElementById('fLogOrigen').value,
+    desde: document.getElementById('fLogDesde').value,
+    hasta: document.getElementById('fLogHasta').value});
+  if(!r.success){ document.getElementById('tbLog').innerHTML=`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--danger);">${r.error||'Error'}</td></tr>`; return; }
+  document.getElementById('logCount').textContent = `Registros (${r.total})`;
+  const tb = document.getElementById('tbLog');
+  if(!r.registros.length){
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Sin registros para ese filtro</td></tr>';
+  } else {
+    const colores = {admin:'var(--info)', resultados:'var(--success)', sorteo:'var(--accent)', 'form-club':'var(--warning)'};
+    tb.innerHTML = r.registros.map(l=>{
+      const col = colores[l.origen] || 'var(--text-secondary)';
+      const det = (l.detalle||'').replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      return `<tr>
+        <td style="white-space:nowrap;font-size:12px;">${l.fecha}</td>
+        <td style="font-weight:600;">${l.actor||'—'}</td>
+        <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--bg-hover);color:${col};">${l.origen}</span></td>
+        <td style="font-family:ui-monospace,monospace;font-size:12px;">${l.accion}</td>
+        <td style="font-size:11px;color:var(--text-muted);max-width:420px;word-break:break-all;">${det}</td>
+      </tr>`;
+    }).join('');
+  }
+  const pagDiv = document.getElementById('logPag');
+  if(r.pages<=1){ pagDiv.innerHTML=''; return; }
+  let html='';
+  if(page>1) html += `<button class="btn btn-gh btn-sm" onclick="loadLog(${page-1})"><i class="fas fa-chevron-left"></i></button>`;
+  for(let i=Math.max(1,page-3); i<=Math.min(r.pages,page+3); i++)
+    html += `<button class="btn ${i===page?'btn-pr':'btn-gh'} btn-sm" onclick="loadLog(${i})">${i}</button>`;
+  if(page<r.pages) html += `<button class="btn btn-gh btn-sm" onclick="loadLog(${page+1})"><i class="fas fa-chevron-right"></i></button>`;
+  html += `<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Pág ${page} de ${r.pages}</span>`;
+  pagDiv.innerHTML = html;
 }
 function openModal(id){document.getElementById(id).classList.add('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
