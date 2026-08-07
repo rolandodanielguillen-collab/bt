@@ -154,7 +154,7 @@ if (isset($_GET['action'])) {
             for ($i = 0; $i < $n; $i++) for ($j = $i + 1; $j < $n; $j++) {
                 $a = (int)$clubesG[$i]['id_club']; $b = (int)$clubesG[$j]['id_club'];
                 $k = min($a, $b) . '-' . max($a, $b);
-                $slots = max(1, min(count($duplas[$a]), count($duplas[$b])));
+                $slots = IC_SLOTS_SERIE;
                 $slotsPorCruce[$k] = $slots;
                 $ms = array_values(array_filter($partG, fn($m) =>
                     (min((int)$m['club1'], (int)$m['club2']) . '-' . max((int)$m['club1'], (int)$m['club2'])) === $k));
@@ -186,7 +186,7 @@ if (isset($_GET['action'])) {
         foreach (['semi1' => 'Semifinal 1', 'semi2' => 'Semifinal 2', 'final' => 'Final', 'tercer' => '3er Puesto'] as $fase => $label) {
             if (!isset($llavesRows[$fase])) continue;
             $a = (int)$llavesRows[$fase]['clubA']; $b = (int)$llavesRows[$fase]['clubB'];
-            $slots = max(1, min(count($duplas[$a] ?? []), count($duplas[$b] ?? [])));
+            $slots = IC_SLOTS_SERIE;
             $ms = array_values(array_filter($partidos, fn($m) => $m['fase'] === $fase));
             $serie = $armarSerie($ms, $a, $b, $slots);
             if (in_array($fase, ['semi1', 'semi2'], true) && $serie['definida']) $semisDefinidas++;
@@ -238,8 +238,7 @@ if (isset($_GET['action'])) {
             $ids = array_keys($mapa);
             $slotsPorCruce = [];
             for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++) {
-                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
-                    max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$i])), count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$j]))));
+                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] = IC_SLOTS_SERIE;
             }
             $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat));
             // Todas las series del grupo deben estar definidas (sj = series jugadas por club)
@@ -272,7 +271,7 @@ if (isset($_GET['action'])) {
         $ganadores = $perdedores = [];
         foreach (['semi1', 'semi2'] as $fase) {
             $a = (int)$rows[$fase]['clubA']; $b = (int)$rows[$fase]['clubB'];
-            $slots = max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $a)), count(ic_duplas($mysqli2, $idEvento, $idCat, $b))));
+            $slots = IC_SLOTS_SERIE;
             $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND fase=?");
             $st->bind_param('iis', $idEvento, $idCat, $fase);
             $st->execute();
@@ -436,8 +435,7 @@ if (isset($_GET['action'])) {
             }
         } else {
             // No crear más partidos regulares que los slots de la serie
-            $slots = max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $club1)),
-                                count(ic_duplas($mysqli2, $idEvento, $idCat, $club2))));
+            $slots = IC_SLOTS_SERIE;
             $st = $mysqli2->prepare(
                 "SELECT COUNT(*) c FROM _ic_partidos
                   WHERE id_evento=? AND id_categoria=? AND fase=? AND grupo=? AND es_desempate=0

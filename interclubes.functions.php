@@ -25,6 +25,15 @@
  */
 const IC_CATS_CRITERIO_VIEJO = [15 => [4, 5, 9, 10]];
 
+/**
+ * Partidos regulares de una serie (+ desempate si quedan 1-1). Fijo en 2 porque el
+ * plantel del reglamento es 2 parejas + 1 suplente por club y categoría (5 jugadores).
+ * NO depende de cuántas parejas cargó cada club: un club con 1 pareja juega los 2
+ * partidos igual, repitiendo jugadores si hace falta (2026-08-07).
+ * ponytail: constante, no max_parejas — si alguna vez se juegan 3, es esta línea.
+ */
+const IC_SLOTS_SERIE = 2;
+
 function ic_criterio_viejo(int $idEvento, int $idCat): bool {
     return in_array($idCat, IC_CATS_CRITERIO_VIEJO[$idEvento] ?? [], true);
 }
@@ -138,8 +147,7 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
             $ids = array_keys($mapa);
             $slotsPorCruce = [];
             for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++) {
-                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
-                    max(1, min(count(ic_duplas($db, $idEvento, $idCat, $ids[$i])), count(ic_duplas($db, $idEvento, $idCat, $ids[$j]))));
+                $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] = IC_SLOTS_SERIE;
             }
             $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat));
             foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) return; // grupo incompleto
@@ -159,7 +167,7 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
         $ganadores = $perdedores = [];
         foreach (['semi1', 'semi2'] as $fase) {
             $a = (int)$rows[$fase]['clubA']; $b = (int)$rows[$fase]['clubB'];
-            $slots = max(1, min(count(ic_duplas($db, $idEvento, $idCat, $a)), count(ic_duplas($db, $idEvento, $idCat, $b))));
+            $slots = IC_SLOTS_SERIE;
             $st = $db->prepare("SELECT * FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND fase=?");
             $st->bind_param('iis', $idEvento, $idCat, $fase);
             $st->execute();
@@ -215,7 +223,7 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce, bool $vi
     // Series definidas
     foreach ($porCruce as $k => $ms) {
         [$a, $b] = array_map('intval', explode('-', $k));
-        $slots = $slotsPorCruce[$k] ?? 2;
+        $slots = $slotsPorCruce[$k] ?? IC_SLOTS_SERIE;
         [$wA, $wB, $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slots);
         if ($definida) {
             $st[$a]['sj']++; $st[$b]['sj']++;

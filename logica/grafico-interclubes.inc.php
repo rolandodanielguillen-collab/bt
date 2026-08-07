@@ -86,6 +86,37 @@ while ($p = $res->fetch_assoc()) {
     }
 }
 
+// ── Suplente opcional por club y categoría (máx 1, tabla _ic_suplentes) ─────
+// No suma a los contadores de parejas: es 1 jugador, no una pareja.
+$suplentesIC     = [];   // [id_club][nombre_cat] = 'Nombre Apellido'
+$supPorCategoria = [];   // [nombre_cat] => [ ['jug' => …, 'club' => …] ]
+$st = $mysqli2->prepare(
+    "SELECT s.id_club, s.ci,
+            COALESCE(cat.categoria, 'SIN CATEGORÍA') AS categoria,
+            TRIM(CONCAT(COALESCE(u.nombre,''),' ',COALESCE(u.apellido,''))) AS jug
+       FROM _ic_suplentes s
+       LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
+       LEFT JOIN _p_usuarios u ON TRIM(u.ci) = TRIM(s.ci)
+      WHERE s.id_evento = ?
+      ORDER BY cat.categoria ASC");
+$st->bind_param('i', $idEventos);
+$st->execute();
+$res = $st->get_result();
+while ($r = $res->fetch_assoc()) {
+    $idCl   = (int)$r['id_club'];
+    $nomCat = $r['categoria'];
+    $jug    = $r['jug'] ?: $r['ci'];
+    $club   = isset($clubesIC[$idCl]) ? $clubesIC[$idCl]['nombre'] : '';
+    $suplentesIC[$idCl][$nomCat] = $jug;
+    $supPorCategoria[$nomCat][]  = ['jug' => $jug, 'club' => $club];
+    // Un club puede tener suplente en una categoría donde todavía no cargó parejas:
+    // sin esto la categoría no se dibujaría y el suplente quedaría invisible otra vez.
+    if (isset($clubesIC[$idCl]) && !isset($clubesIC[$idCl]['parejas'][$nomCat])) {
+        $clubesIC[$idCl]['parejas'][$nomCat] = [];
+    }
+    if (!isset($porCategoria[$nomCat])) $porCategoria[$nomCat] = [];
+}
+
 // ── Sorteo público (grupos de clubes por categoría) ──────────────────────────
 require_once __DIR__ . '/../interclubes.functions.php';
 
@@ -334,6 +365,12 @@ function ic_nombre($n) {
                                                 <div class="text-[.78rem] font-bold text-slate-100 uppercase leading-snug truncate"><?php echo ic_nombre($p['j2'] ?: '—'); ?></div>
                                             </div>
                                             <?php endforeach; ?>
+                                            <?php if (isset($suplentesIC[(int)$cl['id']][$nomCat])): ?>
+                                            <div class="rounded-lg px-3 py-2 flex items-center justify-between gap-2" style="background:rgba(251,191,36,.07);border:1px dashed rgba(251,191,36,.35)">
+                                                <div class="text-[.78rem] font-bold uppercase leading-snug truncate" style="color:#fcd34d"><?php echo ic_nombre($suplentesIC[(int)$cl['id']][$nomCat]); ?></div>
+                                                <span class="flex-shrink-0 text-[.55rem] font-extrabold uppercase tracking-widest px-1.5 py-0.5 rounded" style="background:rgba(251,191,36,.18);color:#fcd34d">Suplente</span>
+                                            </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                     <?php endforeach; ?>
@@ -370,6 +407,19 @@ function ic_nombre($n) {
                                         <?php if ($p['club']): ?>
                                         <span class="flex-shrink-0 text-[.6rem] font-extrabold uppercase tracking-wide px-2 py-1 rounded-md" style="background:rgba(59,130,246,.18);color:#93c5fd;border:1px solid rgba(59,130,246,.3)">
                                             <i class="fa-solid fa-building mr-1"></i><?php echo ic_nombre($p['club']); ?>
+                                        </span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php endforeach; ?>
+                                    <?php foreach ($supPorCategoria[$nomCat] ?? [] as $s): ?>
+                                    <div class="rounded-lg px-3 py-2 flex items-center justify-between gap-2" style="background:rgba(251,191,36,.07);border:1px dashed rgba(251,191,36,.35)">
+                                        <div class="min-w-0 flex items-center gap-2">
+                                            <span class="text-[.78rem] font-bold uppercase leading-snug truncate" style="color:#fcd34d"><?php echo ic_nombre($s['jug']); ?></span>
+                                            <span class="flex-shrink-0 text-[.55rem] font-extrabold uppercase tracking-widest px-1.5 py-0.5 rounded" style="background:rgba(251,191,36,.18);color:#fcd34d">Suplente</span>
+                                        </div>
+                                        <?php if ($s['club']): ?>
+                                        <span class="flex-shrink-0 text-[.6rem] font-extrabold uppercase tracking-wide px-2 py-1 rounded-md" style="background:rgba(59,130,246,.18);color:#93c5fd;border:1px solid rgba(59,130,246,.3)">
+                                            <i class="fa-solid fa-building mr-1"></i><?php echo ic_nombre($s['club']); ?>
                                         </span>
                                         <?php endif; ?>
                                     </div>

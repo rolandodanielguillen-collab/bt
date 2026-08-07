@@ -205,9 +205,7 @@ function ic_fila_partido($label, $m, $a, $b, $nomA, $nomB, $nombres, $badgeL = '
 
 $ctx = ['mapaTodos' => $mapaTodos, 'nombres' => $nombres, 'duplas' => $duplas];
 $qsBase = htmlspecialchars(($rowEvento['nombre_evento2'] ? '' : '') . ($_GET['url'] ?? ''), ENT_QUOTES);
-$slotsCruce = function ($x, $y) use ($duplas) {
-    return max(1, min(count($duplas[$x] ?? []), count($duplas[$y] ?? [])));
-};
+$slotsCruce = fn($x, $y) => IC_SLOTS_SERIE;
 
 // Llaves de la categoría
 $llaves = [];
