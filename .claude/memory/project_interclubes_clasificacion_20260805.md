@@ -16,7 +16,11 @@ del club (interclubes.php) conserva nombre completo a propósito.
 Backups `.bak-20260805-nombres` en VPS. Verificado en vivo: VÍCTOR ALFONSO,
 MARCELO PEREIRA, LUCIO VARGAS.
 
-Estado: **COMPLETO — LIVE en bt.com.py, verificado con el grupo real, commit 9cb7c81 pusheado.**
+Estado: **SUPERADO el 2026-08-07 para las categorías nuevas** — este criterio
+quedó congelado SOLO en las categorías del ev15 que ya lo usaron (4, 5, 9, 10).
+El resto pasó a "1 pt por partido ganado + saldo de games completos": ver
+`project_interclubes_criterio_20260807.md`. Abajo, el criterio tal como se
+implementó el 05-ago (commit 9cb7c81), que sigue vigente para esas 4 categorías.
 
 ## Regla implementada (confirmada por el usuario)
 - 1 punto por serie ganada.
