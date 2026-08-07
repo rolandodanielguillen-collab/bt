@@ -11,6 +11,16 @@ header('Content-Type: application/json; charset=utf-8');
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
+// ── Red de seguridad: cualquier excepción no atrapada (típicamente mysqli con
+// STRICT_TRANS_TABLES) mataba el script SIN cuerpo, y el fetch del admin tiraba
+// "Unexpected end of JSON input" sin decir qué pasó. Ahora sale un JSON legible.
+set_exception_handler(function (Throwable $e) {
+    error_log('tvt_api ' . ($_GET['action'] ?? '?') . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
+});
+
 // ── Auth check ──────────────────────────────────────────────────
 if (!isset($_SESSION['admin_id'])) {
     echo json_encode(['success' => false, 'error' => 'No autenticado']);
@@ -1259,12 +1269,18 @@ if ($action === 'editar_jugador') {
     if (!$id) respErr('Falta ID');
 
     $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion'];
+    // Con STRICT_TRANS_TABLES, '' no es válido en date ni en enum: hay que mandar
+    // NULL. Y en las columnas NOT NULL, el campo vacío se ignora (antes cualquiera
+    // de los dos casos tiraba un fatal y el navegador se quedaba sin respuesta).
+    $vacioEsNull   = ['fecha_nacimiento', 'sexo', 'estado'];
+    $vacioSeIgnora = ['ci', 'tipo'];
     $sets = [];
     foreach ($campos as $c) {
-        if (isset($_GET[$c])) {
-            $v = $mysqli2->real_escape_string(trim($_GET[$c]));
-            $sets[] = "{$c} = '{$v}'";
-        }
+        if (!isset($_GET[$c])) continue;
+        $v = trim($_GET[$c]);
+        if ($v === '' && in_array($c, $vacioSeIgnora, true)) continue;
+        if ($v === '' && in_array($c, $vacioEsNull, true)) { $sets[] = "{$c} = NULL"; continue; }
+        $sets[] = "{$c} = '" . $mysqli2->real_escape_string($v) . "'";
     }
     if (empty($sets)) respErr('No hay campos para actualizar');
 
