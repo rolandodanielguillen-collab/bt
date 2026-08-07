@@ -168,7 +168,7 @@ if (isset($_GET['action'])) {
                 'grupo' => $g,
                 'clubes' => array_map(fn($c) => ['id' => (int)$c['id_club'], 'nombre' => $c['nombre']], $clubesG),
                 'series' => $series,
-                'posiciones' => ic_posiciones($mapa, $partG, $slotsPorCruce),
+                'posiciones' => ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat)),
             ];
         }
         if (count($grupos) < 2) $gruposCompletos = false;
@@ -195,6 +195,7 @@ if (isset($_GET['action'])) {
 
         echo json_encode([
             'success' => true,
+            'criterio_viejo' => ic_criterio_viejo($idEvento, $idCat),
             'grupos' => $out,
             'duplas' => $duplas,
             'jugadores' => $jugadoresAll,
@@ -240,7 +241,7 @@ if (isset($_GET['action'])) {
                 $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
                     max(1, min(count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$i])), count(ic_duplas($mysqli2, $idEvento, $idCat, $ids[$j]))));
             }
-            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce);
+            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat));
             // Todas las series del grupo deben estar definidas (sj = series jugadas por club)
             foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) {
                 echo json_encode(['success' => false, 'error' => "El grupo $g todavía tiene series sin definir"]); exit;
@@ -950,13 +951,16 @@ async function cargarEstado() {
       const saldo = p.gamesF - p.gamesC;
       const clsSaldo = saldo > 0 ? 'saldo-pos' : (saldo < 0 ? 'saldo-neg' : '');
       filas += `<tr class="${i === 0 && p.pts > 0 ? 'lider' : ''}"><td class="club">${i+1}. ${UP(p.club)}</td>
-        <td>${p.sg}-${p.sp}</td><td class="${clsSaldo}">${saldo > 0 ? '+' : ''}${saldo}</td><td><b>${p.pts}</b></td></tr>`;
+        <td>${p.sg}-${p.sp}</td><td>${p.pg}-${p.pp}</td><td class="${clsSaldo}">${saldo > 0 ? '+' : ''}${saldo}</td><td><b>${p.pts}</b></td></tr>`;
     });
+    const nota = r.criterio_viejo
+      ? '1 pt por serie ganada &middot; Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)'
+      : '1 pt por partido ganado &middot; Desempate: saldo de games completos (incluye el 3er partido)';
     modales += `<div class="modal-clasif-overlay" id="modal-clasif-${g.grupo}" onclick="if(event.target===this)closeModalClasif('modal-clasif-${g.grupo}')">
       <div class="modal-clasif-box">
         <div class="modal-clasif-header"><span>Clasificación — Grupo ${g.grupo}</span><button onclick="closeModalClasif('modal-clasif-${g.grupo}')">&times;</button></div>
-        <table class="pos"><tr><th style="text-align:left;">Club</th><th>Series</th><th>Games</th><th>Pts</th></tr>${filas}</table>
-        <div class="pos-nota">Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)</div>
+        <table class="pos"><tr><th style="text-align:left;">Club</th><th>Series</th><th>Part.</th><th>Games</th><th>Pts</th></tr>${filas}</table>
+        <div class="pos-nota">${nota}</div>
       </div></div>`;
   });
   h += `</div>`;

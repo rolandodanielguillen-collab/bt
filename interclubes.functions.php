@@ -8,10 +8,26 @@
  *   Partido 2 = dupla 2 vs dupla 2 (tantos como min(duplas A, duplas B)).
  * - Cada partido: 2 sets + 3er set de desempate si empatan.
  * - Serie empatada tras los partidos regulares → partido de DESEMPATE con dupla mezclada.
- *   El desempate vale ±1 al saldo de games (no suma sus games reales ni sets).
- * - Posiciones: 1 punto por serie ganada; desempate por saldo de games; confronto
- *   directo solo si persiste el empate; último recurso posición de sorteo.
+ * - Posiciones: DOS criterios conviviendo (ver ic_criterio_viejo):
+ *   · VIEJO (categorías que ya jugaron): 1 pt por serie ganada; desempate por saldo de
+ *     games con el 3er partido valiendo ±1; confronto directo; último recurso sorteo.
+ *   · NUEVO (2026-08-07): 1 pt por PARTIDO ganado (desempate incluido); desempate por
+ *     saldo de games COMPLETOS (el 3er partido suma su marcador real); luego series
+ *     ganadas y dif. de sets; último recurso sorteo. SIN confronto directo.
  */
+
+/**
+ * Categorías que arrancaron con el criterio viejo y lo mantienen hasta terminar
+ * el torneo — cambiarlas a mitad de camino reescribiría partidos ya jugados.
+ * [id_evento => [id_categoria, ...]]. Evento 15: D MASC(4), E MASC(5), D FEM(9), E FEM(10).
+ * ponytail: lista explícita y no "la categoría tiene partidos" — así el criterio de una
+ * categoría no cambia solo el día que se carga su primer resultado.
+ */
+const IC_CATS_CRITERIO_VIEJO = [15 => [4, 5, 9, 10]];
+
+function ic_criterio_viejo(int $idEvento, int $idCat): bool {
+    return in_array($idCat, IC_CATS_CRITERIO_VIEJO[$idEvento] ?? [], true);
+}
 
 // Nombre para mostrar: primer nombre + primer apellido (pedido 2026-08-05).
 // $t: alias de tabla con punto ('u1.') o '' si la query no usa alias.
@@ -125,7 +141,7 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
                 $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] =
                     max(1, min(count(ic_duplas($db, $idEvento, $idCat, $ids[$i])), count(ic_duplas($db, $idEvento, $idCat, $ids[$j]))));
             }
-            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce);
+            $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat));
             foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) return; // grupo incompleto
         }
         $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
@@ -167,7 +183,7 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
  * Acumula stats (series/partidos/sets/games/pts) para un conjunto de clubes.
  * Usada por las posiciones y por la mini-liga del confronto directo.
  */
-function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
+function ic_stats(array $clubes, array $partidos, array $slotsPorCruce, bool $viejo): array {
     $st = [];
     foreach ($clubes as $id => $nombre) {
         $st[$id] = ['id_club' => $id, 'club' => $nombre, 'sj' => 0, 'sg' => 0, 'sp' => 0,
@@ -181,8 +197,8 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
         [$s1, $s2, $g1, $g2] = ic_sets_partido($m);
         $gan = ic_ganador_partido($m);
         if ($gan === 0) continue;
-        if ((int)$m['es_desempate'] === 1) {
-            // Regla: el partido de desempate vale ±1 al saldo de games (no games reales ni sets)
+        if ($viejo && (int)$m['es_desempate'] === 1) {
+            // Criterio viejo: el partido de desempate vale ±1 al saldo (no games reales ni sets)
             $w = $gan === 1 ? $c1 : $c2; $l = $gan === 1 ? $c2 : $c1;
             $st[$w]['gamesF']++; $st[$l]['gamesC']++;
         } else {
@@ -203,25 +219,34 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce): array {
         [$wA, $wB, $definida, $ganador] = ic_estado_serie($ms, $a, $b, $slots);
         if ($definida) {
             $st[$a]['sj']++; $st[$b]['sj']++;
-            if ($ganador === $a) { $st[$a]['sg']++; $st[$a]['pts']++; $st[$b]['sp']++; }
-            else                 { $st[$b]['sg']++; $st[$b]['pts']++; $st[$a]['sp']++; }
+            if ($ganador === $a) { $st[$a]['sg']++; $st[$b]['sp']++; }
+            else                 { $st[$b]['sg']++; $st[$a]['sp']++; }
         }
     }
+    // Puntos: criterio viejo = 1 por serie ganada; nuevo = 1 por partido ganado
+    foreach ($st as $id => $c) $st[$id]['pts'] = $viejo ? $c['sg'] : $c['pg'];
     return $st;
 }
 
 /**
  * Posiciones de un grupo. $clubes: [id_club => nombre] EN ORDEN DE SORTEO.
- * Criterio (reglamento 2026-08-05): pts → SALDO DE GAMES global (desempate
- * vale ±1, ver ic_stats) → CONFRONTO DIRECTO entre los que sigan empatados
- * (mini-liga: pts y saldo solo entre ellos) → posición del sorteo (último
- * recurso en empates circulares perfectos).
+ * $viejo = true (categorías ya jugadas, reglamento 2026-08-05): pts → SALDO DE GAMES
+ * global (desempate vale ±1) → CONFRONTO DIRECTO entre los que sigan empatados
+ * (mini-liga: pts y saldo solo entre ellos) → posición del sorteo.
+ * $viejo = false (reglamento 2026-08-07): pts (1 por partido ganado) → saldo de games
+ * completos → series ganadas → dif. de sets → posición del sorteo. Sin confronto directo.
  */
-function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): array {
-    $st = ic_stats($clubes, $partidos, $slotsPorCruce);
+function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce, bool $viejo): array {
+    $st = ic_stats($clubes, $partidos, $slotsPorCruce, $viejo);
     $ordenSorteo = array_flip(array_keys($clubes));
     $saldo = fn($c) => $c['gamesF'] - $c['gamesC'];
     $lista = array_values($st);
+    if (!$viejo) {
+        $key = fn($c) => [$c['pts'], $saldo($c), $c['sg'], $c['setsF'] - $c['setsC'],
+                          -($ordenSorteo[$c['id_club']] ?? 99)];
+        usort($lista, fn($x, $y) => $key($y) <=> $key($x));
+        return $lista;
+    }
     usort($lista, fn($x, $y) => [$y['pts'], $saldo($y)] <=> [$x['pts'], $saldo($x)]);
     $out = [];
     for ($i = 0, $n = count($lista); $i < $n; ) {
@@ -234,7 +259,7 @@ function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce): ar
                 array_intersect_key($clubes, array_flip($ids)),
                 array_values(array_filter($partidos, fn($m) =>
                     in_array((int)$m['club1'], $ids, true) && in_array((int)$m['club2'], $ids, true))),
-                $slotsPorCruce);
+                $slotsPorCruce, true);
             $key = function ($c) use ($mini, $saldo, $ordenSorteo) {
                 $m = $mini[$c['id_club']];
                 return [$m['pts'], $saldo($m), -($ordenSorteo[$c['id_club']] ?? 99)];

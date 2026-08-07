@@ -417,7 +417,7 @@ if (isset($llaves['tercer'])) {
           $slotsPorCruce = [];
           for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++)
               $slotsPorCruce[min($ids[$i], $ids[$j]) . '-' . max($ids[$i], $ids[$j])] = $slotsCruce((int)$ids[$i], (int)$ids[$j]);
-          $posiciones = ic_posiciones($mapaG, $partG, $slotsPorCruce);
+          $posiciones = ic_posiciones($mapaG, $partG, $slotsPorCruce, ic_criterio_viejo($idEventos, $idCat));
       ?>
       <div style="width:100%;">
         <div class="group-head">
@@ -445,19 +445,22 @@ if (isset($llaves['tercer'])) {
             <button onclick="closeModalClasif('modal-clasif-<?php echo $g; ?>')">&times;</button>
           </div>
           <table class="pos">
-            <tr><th style="text-align:left;">Club</th><th>Series</th><th>Games</th><th>Pts</th></tr>
+            <tr><th style="text-align:left;">Club</th><th>Series</th><th>Part.</th><th>Games</th><th>Pts</th></tr>
             <?php foreach ($posiciones as $ip => $p):
                 $saldoG = $p['gamesF'] - $p['gamesC'];
                 $clsSaldo = $saldoG > 0 ? 'saldo-pos' : ($saldoG < 0 ? 'saldo-neg' : ''); ?>
             <tr class="<?php echo $ip === 0 && $p['pts'] > 0 ? 'lider' : ''; ?>">
               <td class="club"><?php echo ($ip + 1) . '. ' . icn($p['club']); ?></td>
               <td><?php echo $p['sg']; ?>-<?php echo $p['sp']; ?></td>
+              <td><?php echo $p['pg']; ?>-<?php echo $p['pp']; ?></td>
               <td class="<?php echo $clsSaldo; ?>"><?php echo ($saldoG > 0 ? '+' : '') . $saldoG; ?></td>
               <td><b><?php echo $p['pts']; ?></b></td>
             </tr>
             <?php endforeach; ?>
           </table>
-          <div class="pos-nota">Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)</div>
+          <div class="pos-nota"><?php echo ic_criterio_viejo($idEventos, $idCat)
+            ? '1 pt por serie ganada &middot; Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)'
+            : '1 pt por partido ganado &middot; Desempate: saldo de games completos (incluye el 3er partido)'; ?></div>
         </div>
       </div>
       <?php endforeach; ?>
