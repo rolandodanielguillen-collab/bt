@@ -76,6 +76,32 @@ datos reales de cat 3 G1, cubre criterio nuevo y viejo). Corre con
 `php test_interclubes_criterio.php`. Reemplaza al `scratchpad/test_criterio.php`
 de la sesión anterior, que se perdía con el scratchpad.
 
+## 2026-08-08: llaves desincronizadas por corrección de marcador (commit d877498)
+
+Segundo síntoma de la MISMA trampa, ahora confirmada como bug recurrente y no
+como caso aislado del fix anterior. Ev15 cat 8: la tabla estaba bien (ARENA 1ro,
+CHIQUI 2do, MOES 3ro — los tres a 1 serie, define el saldo de games +2/0/−2) pero
+las semis tenían ARENA y CHIQUI de lados cambiados.
+
+Causa exacta (por `_bt_log`): a las 00:10:24 el grupo 2 se completó y se
+generaron las semis. Entre 00:12:21 y 00:13:52 el admin corrigió 3 marcadores
+del grupo y uno de esos cambios forzó un desempate — la tabla se movió, el
+bracket no. `ic_autogenerar_llaves` usaba INSERT IGNORE y ya no volvía a mirar.
+
+Fix: `ic_upsert_llave()` + `ic_fase_con_juego()`. Cada guardado recalcula y
+actualiza la fase siguiente (borrando sus partidos vacíos) **solo mientras esa
+fase no tenga games cargados**. Si el bracket ya se juega, no se toca. Aplica
+igual a final/3er puesto, que tenían el mismo problema un nivel más arriba.
+
+Verificación: diff de `_ic_llaves` del ev15 entero antes/después del resync →
+cambia SOLO cat 8 (semi1 13→8 en clubB, semi2 8→3 en clubA). Cat 3, con la
+semi1 en juego, intacta. Público live: cat 8 = Lujini vs En lo de Chiqui y
+ARENA BAR vs Vista Bar. Backup VPS `.bak-20260808`.
+El test del repo suma el cruce de semis con los datos reales de cat 8 (13 asserts).
+
+**Para la próxima:** el log `_bt_log` (campo `fecha`, no `creado`) sirvió para
+datar el bug al minuto. Y el parámetro de la pública es `?categoria=N`, no `cat`.
+
 ## OJO al retomar
 - Las 6 categorías con criterio nuevo ya están `visualizar_en_llaves='si'`
   (3, 4, 5, 8, 9, 10); 19, 20, 25 y 26 siguen en 'no' y sin partidos.
