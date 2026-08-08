@@ -113,10 +113,49 @@ function ic_estado_serie(array $partidos, int $clubA, int $clubB, int $slots): a
     return [$winsA, $winsB, $definida, $ganador, $necesitaDesempate];
 }
 
+// ¿Esta fase de llaves ya tiene algún games cargado? Una fase en juego no se reescribe.
+function ic_fase_con_juego(mysqli $db, int $ev, int $cat, string $fase): bool {
+    $st = $db->prepare(
+        "SELECT COUNT(*) c FROM _ic_partidos
+          WHERE id_evento=? AND id_categoria=? AND fase=?
+            AND (s1c1+s1c2+s2c1+s2c2+s3c1+s3c2) > 0");
+    $st->bind_param('iis', $ev, $cat, $fase);
+    $st->execute();
+    return (int)$st->get_result()->fetch_assoc()['c'] > 0;
+}
+
 /**
- * Avance AUTOMÁTICO de llaves: si ambos grupos completaron sus series y no hay
- * semis → las crea (1°G1 vs 2°G2, 1°G2 vs 2°G1). Si las semis están definidas
- * y no hay final → crea final y 3er puesto. Nunca borra nada.
+ * Crea o RE-SINCRONIZA una llave, y devuelve el par [clubA, clubB] vigente.
+ * El INSERT IGNORE solo no alcanza: si un resultado de la fase anterior se CORRIGE
+ * después de generarla, la llave queda con los clubes viejos (pasó el 2026-08-08 en
+ * ev15 cat 8 — se editaron 3 marcadores del grupo 2 minutos después de crearse las
+ * semis y el bracket nunca se enteró). Reescribe solo mientras esa fase no tenga
+ * games cargados; si ya se está jugando, la deja como está.
+ */
+function ic_upsert_llave(mysqli $db, int $ev, int $cat, string $fase, int $ca, int $cb, ?array $actual): array {
+    if (!$actual) {
+        $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
+        $st->bind_param('iisii', $ev, $cat, $fase, $ca, $cb);
+        $st->execute();
+        return [$ca, $cb];
+    }
+    if ((int)$actual['clubA'] === $ca && (int)$actual['clubB'] === $cb) return [$ca, $cb];
+    if (ic_fase_con_juego($db, $ev, $cat, $fase)) return [(int)$actual['clubA'], (int)$actual['clubB']];
+    $st = $db->prepare("UPDATE _ic_llaves SET clubA=?, clubB=? WHERE id_evento=? AND id_categoria=? AND fase=?");
+    $st->bind_param('iiiis', $ca, $cb, $ev, $cat, $fase);
+    $st->execute();
+    // Los partidos de esa fase quedaron con los clubes viejos y sin jugar: se rehacen.
+    $st = $db->prepare("DELETE FROM _ic_partidos WHERE id_evento=? AND id_categoria=? AND fase=?");
+    $st->bind_param('iis', $ev, $cat, $fase);
+    $st->execute();
+    return [$ca, $cb];
+}
+
+/**
+ * Avance AUTOMÁTICO de llaves: si ambos grupos completaron sus series → semis
+ * (1°G1 vs 2°G2, 1°G2 vs 2°G1). Si las semis están definidas → final y 3er puesto.
+ * Se vuelve a calcular en cada guardado y RE-SINCRONIZA la fase siguiente mientras
+ * esa fase no tenga games cargados, así una corrección de marcador se propaga.
  */
 function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
     $st = $db->prepare("SELECT fase, clubA, clubB FROM _ic_llaves WHERE id_evento=? AND id_categoria=?");
@@ -126,8 +165,11 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
     $rows = [];
     while ($r = $res->fetch_assoc()) $rows[$r['fase']] = $r;
 
-    // Paso 1: semis desde posiciones de grupos completos
-    if (!isset($rows['semi1']) || !isset($rows['semi2'])) {
+    // Paso 1: semis desde posiciones de grupos completos.
+    // Si alguna semi ya se está jugando, el cruce quedó fijo: ni recalcular.
+    $semisEnJuego = ic_fase_con_juego($db, $idEvento, $idCat, 'semi1')
+                 || ic_fase_con_juego($db, $idEvento, $idCat, 'semi2');
+    if (!isset($rows['semi1']) || !isset($rows['semi2']) || !$semisEnJuego) {
         $pos = [];
         foreach ([1, 2] as $g) {
             $st = $db->prepare(
@@ -153,18 +195,17 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
             $pos[$g] = ic_posiciones($mapa, $partG, $slotsPorCruce, ic_criterio_viejo($idEvento, $idCat));
             foreach ($pos[$g] as $p) if ($p['sj'] < count($mapa) - 1) return; // grupo incompleto
         }
-        $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
-        foreach ([['semi1', $pos[1][0]['id_club'], $pos[2][1]['id_club']],
-                  ['semi2', $pos[2][0]['id_club'], $pos[1][1]['id_club']]] as [$fase, $ca, $cb]) {
-            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
-            $st->execute();
+        foreach ([['semi1', (int)$pos[1][0]['id_club'], (int)$pos[2][1]['id_club']],
+                  ['semi2', (int)$pos[2][0]['id_club'], (int)$pos[1][1]['id_club']]] as [$fase, $ca, $cb]) {
+            [$a, $b] = ic_upsert_llave($db, $idEvento, $idCat, $fase, $ca, $cb, $rows[$fase] ?? null);
+            $rows[$fase] = ['clubA' => $a, 'clubB' => $b];
         }
-        $rows['semi1'] = ['clubA' => $pos[1][0]['id_club'], 'clubB' => $pos[2][1]['id_club']];
-        $rows['semi2'] = ['clubA' => $pos[2][0]['id_club'], 'clubB' => $pos[1][1]['id_club']];
     }
 
-    // Paso 2: final y 3er puesto desde semis definidas
-    if (!isset($rows['final'])) {
+    // Paso 2: final y 3er puesto desde semis definidas (mismo re-sync que las semis)
+    $finalEnJuego = ic_fase_con_juego($db, $idEvento, $idCat, 'final')
+                 || ic_fase_con_juego($db, $idEvento, $idCat, 'tercer');
+    if (!isset($rows['final']) || !$finalEnJuego) {
         $ganadores = $perdedores = [];
         foreach (['semi1', 'semi2'] as $fase) {
             $a = (int)$rows[$fase]['clubA']; $b = (int)$rows[$fase]['clubB'];
@@ -180,10 +221,9 @@ function ic_autogenerar_llaves(mysqli $db, int $idEvento, int $idCat): void {
             $ganadores[] = $ganador;
             $perdedores[] = $ganador === $a ? $b : $a;
         }
-        $st = $db->prepare("INSERT IGNORE INTO _ic_llaves (id_evento, id_categoria, fase, clubA, clubB) VALUES (?,?,?,?,?)");
-        foreach ([['final', $ganadores[0], $ganadores[1]], ['tercer', $perdedores[0], $perdedores[1]]] as [$fase, $ca, $cb]) {
-            $st->bind_param('iisii', $idEvento, $idCat, $fase, $ca, $cb);
-            $st->execute();
+        foreach ([['final', (int)$ganadores[0], (int)$ganadores[1]],
+                  ['tercer', (int)$perdedores[0], (int)$perdedores[1]]] as [$fase, $ca, $cb]) {
+            ic_upsert_llave($db, $idEvento, $idCat, $fase, $ca, $cb, $rows[$fase] ?? null);
         }
     }
 }
