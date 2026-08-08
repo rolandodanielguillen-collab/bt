@@ -102,9 +102,30 @@ El test del repo suma el cruce de semis con los datos reales de cat 8 (13 assert
 **Para la próxima:** el log `_bt_log` (campo `fecha`, no `creado`) sirvió para
 datar el bug al minuto. Y el parámetro de la pública es `?categoria=N`, no `cat`.
 
+## Cierre de sesión 2026-08-08 (madrugada)
+
+Verificado a pedido del usuario que los dos fixes NO tocaron las categorías
+firmes: posiciones de cats 4/5/9/10 = 24 líneas con diff vacío contra el
+baseline previo a todo el trabajo; sus 16 filas de `_ic_llaves` idénticas; los
+12 bloques de partidos (grupo+semi1+semi2 de cada una) con sus games intactos.
+La prueba fuerte: el resync corrió sobre las 10 categorías del evento, las
+evaluó y no las tocó — el único cambio en todo `_ic_llaves` del ev15 fue cat 8.
+
+**Estado del ev15 al cerrar:** cat 3 con la semi1 EN JUEGO (CSA4 vs ARENA BAR,
+serie 1-1 en desempate) y la semi2 terminada (Lujini 2-0 a Vista Bar). Cat 8
+con las dos semis recién emparejadas, sin jugar. Cats 4/5/9/10 con las semis
+jugadas y final + 3er puesto emparejados pero SIN jugar.
+
 ## OJO al retomar
+- En cats 4/5/9/10 la final y el 3er puesto siguen siendo re-sincronizables
+  (no tienen games cargados). Es a propósito: si se corrige un marcador de una
+  semifinal, la final se reacomoda con el ganador correcto. Lo jugado no se
+  mueve; lo que no arrancó sigue al resultado.
 - Las 6 categorías con criterio nuevo ya están `visualizar_en_llaves='si'`
   (3, 4, 5, 8, 9, 10); 19, 20, 25 y 26 siguen en 'no' y sin partidos.
 - Sigue sin definir si el partido de desempate debería sumar algo aparte
   (hoy suma sus games al saldo, y su victoria a "partidos ganados").
-- Backups del VPS de esta corrección: `.bak-20260807b`.
+- Backups del VPS: `.bak-20260807b` (criterio) y `.bak-20260808` (llaves).
+- Scripts de verificación reusables, en el VPS: `/tmp/dump_pos.php` (posiciones
+  de todo el evento, solo lectura, para diffear cualquier cambio del cálculo) y
+  `/tmp/resync_llaves.php` (corre ic_autogenerar_llaves sobre todas las cats).
