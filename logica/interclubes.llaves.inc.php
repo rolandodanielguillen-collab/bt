@@ -458,7 +458,7 @@ if (isset($llaves['tercer'])) {
           </table>
           <div class="pos-nota"><?php echo ic_criterio_viejo($idEventos, $idCat)
             ? '1 pt por serie ganada &middot; Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)'
-            : '1 pt por partido ganado &middot; Desempate: saldo de games completos (incluye el 3er partido)'; ?></div>
+            : '1 pt por serie ganada &middot; Desempate: saldo de games completos (incluye el 3er partido) &middot; partidos ganados'; ?></div>
         </div>
       </div>
       <?php endforeach; ?>

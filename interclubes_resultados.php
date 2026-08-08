@@ -955,7 +955,7 @@ async function cargarEstado() {
     });
     const nota = r.criterio_viejo
       ? '1 pt por serie ganada &middot; Desempate: saldo de games (el 3er partido de la serie vale &plusmn;1)'
-      : '1 pt por partido ganado &middot; Desempate: saldo de games completos (incluye el 3er partido)';
+      : '1 pt por serie ganada &middot; Desempate: saldo de games completos (incluye el 3er partido) &middot; partidos ganados';
     modales += `<div class="modal-clasif-overlay" id="modal-clasif-${g.grupo}" onclick="if(event.target===this)closeModalClasif('modal-clasif-${g.grupo}')">
       <div class="modal-clasif-box">
         <div class="modal-clasif-header"><span>Clasificación — Grupo ${g.grupo}</span><button onclick="closeModalClasif('modal-clasif-${g.grupo}')">&times;</button></div>

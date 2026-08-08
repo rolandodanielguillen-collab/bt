@@ -8,12 +8,13 @@
  *   Partido 2 = dupla 2 vs dupla 2 (tantos como min(duplas A, duplas B)).
  * - Cada partido: 2 sets + 3er set de desempate si empatan.
  * - Serie empatada tras los partidos regulares → partido de DESEMPATE con dupla mezclada.
- * - Posiciones: DOS criterios conviviendo (ver ic_criterio_viejo):
- *   · VIEJO (categorías que ya jugaron): 1 pt por serie ganada; desempate por saldo de
- *     games con el 3er partido valiendo ±1; confronto directo; último recurso sorteo.
- *   · NUEVO (2026-08-07): 1 pt por PARTIDO ganado (desempate incluido); desempate por
- *     saldo de games COMPLETOS (el 3er partido suma su marcador real); luego series
- *     ganadas y dif. de sets; último recurso sorteo. SIN confronto directo.
+ * - Posiciones: 1 pt por SERIE ganada en ambos criterios. Lo que cambia es el desempate
+ *   (ver ic_criterio_viejo):
+ *   · VIEJO (categorías que ya jugaron): saldo de games con el 3er partido valiendo ±1;
+ *     confronto directo; último recurso sorteo.
+ *   · NUEVO (2026-08-07): saldo de games COMPLETOS (el 3er partido suma su marcador
+ *     real); luego partidos ganados y dif. de sets; último recurso sorteo.
+ *     SIN confronto directo.
  */
 
 /**
@@ -231,8 +232,9 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce, bool $vi
             else                 { $st[$b]['sg']++; $st[$a]['sp']++; }
         }
     }
-    // Puntos: criterio viejo = 1 por serie ganada; nuevo = 1 por partido ganado
-    foreach ($st as $id => $c) $st[$id]['pts'] = $viejo ? $c['sg'] : $c['pg'];
+    // Puntos: 1 por SERIE ganada, en los dos criterios (confirmado 2026-08-07 noche).
+    // El criterio decide el DESEMPATE, no los puntos.
+    foreach ($st as $id => $c) $st[$id]['pts'] = $c['sg'];
     return $st;
 }
 
@@ -241,8 +243,8 @@ function ic_stats(array $clubes, array $partidos, array $slotsPorCruce, bool $vi
  * $viejo = true (categorías ya jugadas, reglamento 2026-08-05): pts → SALDO DE GAMES
  * global (desempate vale ±1) → CONFRONTO DIRECTO entre los que sigan empatados
  * (mini-liga: pts y saldo solo entre ellos) → posición del sorteo.
- * $viejo = false (reglamento 2026-08-07): pts (1 por partido ganado) → saldo de games
- * completos → series ganadas → dif. de sets → posición del sorteo. Sin confronto directo.
+ * $viejo = false (reglamento 2026-08-07): pts → saldo de games COMPLETOS → partidos
+ * ganados → dif. de sets → posición del sorteo. Sin confronto directo.
  */
 function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce, bool $viejo): array {
     $st = ic_stats($clubes, $partidos, $slotsPorCruce, $viejo);
@@ -250,7 +252,7 @@ function ic_posiciones(array $clubes, array $partidos, array $slotsPorCruce, boo
     $saldo = fn($c) => $c['gamesF'] - $c['gamesC'];
     $lista = array_values($st);
     if (!$viejo) {
-        $key = fn($c) => [$c['pts'], $saldo($c), $c['sg'], $c['setsF'] - $c['setsC'],
+        $key = fn($c) => [$c['pts'], $saldo($c), $c['pg'], $c['setsF'] - $c['setsC'],
                           -($ordenSorteo[$c['id_club']] ?? 99)];
         usort($lista, fn($x, $y) => $key($y) <=> $key($x));
         return $lista;
