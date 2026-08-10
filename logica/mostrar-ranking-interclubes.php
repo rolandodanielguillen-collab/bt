@@ -246,7 +246,13 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 #ric-container .c-chev { width:30px !important; flex-shrink:0 !important; color:#9ca3af !important; font-size:12px !important; }
 #ric-container .ric-det { display:none !important; border-bottom:1px solid #eee !important; background:#f3f4f6 !important; padding:6px 14px 12px !important; }
 #ric-container .ric-det.open { display:block !important; }
-#ric-container .ric-det-ev { font-size:11px !important; font-weight:800 !important; text-transform:uppercase !important; letter-spacing:.05em !important; color:#1e3a5f !important; padding:10px 0 4px !important; }
+/* Fecha dentro del detalle del club: se despliega para ver sus categorías */
+#ric-container .ric-det-ev { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; cursor:pointer !important; font-size:11px !important; font-weight:800 !important; text-transform:uppercase !important; letter-spacing:.05em !important; color:#1e3a5f !important; padding:10px 8px !important; margin-top:6px !important; background:#e8eef5 !important; border-radius:7px !important; }
+#ric-container .ric-det-ev:hover { background:#dde6f0 !important; }
+#ric-container .ric-det-chev { font-size:12px !important; color:#64748b !important; transition:transform .2s !important; }
+#ric-container .ric-det-ev.abierta .ric-det-chev { transform:rotate(180deg) !important; }
+#ric-container .ric-det-cats { display:none !important; padding:0 8px 6px !important; }
+#ric-container .ric-det-cats.open { display:block !important; }
 #ric-container .ric-det-row { display:flex !important; align-items:center !important; border-top:1px solid #e5e7eb !important; padding:6px 0 !important; }
 #ric-container .ric-det-cat { flex:1 !important; font-size:12px !important; color:#374151 !important; font-weight:600 !important; }
 #ric-container .ric-det-pos { width:110px !important; font-size:11px !important; font-weight:800 !important; color:#6b7280 !important; text-align:right !important; }
@@ -362,23 +368,29 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
         <div class="ric-td c-chev">&#8964;</div>
       </div>
 
+      <!-- Detalle en 2 niveles: club → fecha → categorías -->
       <div id="<?php echo $det; ?>" class="ric-det">
-        <?php foreach ($c['eventos'] as $idEv => $ev): ?>
-          <div class="ric-det-ev"><?php echo ric_txt($eventosIC[$idEv] ?? ''); ?> — <?php echo $ev['pts']; ?> pts</div>
-          <?php foreach ($ev['cats'] as $d): ?>
-          <div class="ric-det-row">
-            <div class="ric-det-cat"><?php echo ric_txt($d['cat']); ?></div>
-            <div class="ric-det-pos p<?php echo $d['pos']; ?>"><?php echo $d['label']; ?></div>
-            <div class="ric-det-pts"><?php echo $d['pts']; ?></div>
+        <?php foreach ($c['eventos'] as $idEv => $ev): $detCat = $det . '-' . $idEv; ?>
+          <div class="ric-det-ev" onclick="ricToggle('<?php echo $detCat; ?>', this)">
+            <span><?php echo $nroFecha[$idEv]; ?>ª fecha · <?php echo ric_txt($eventosIC[$idEv] ?? ''); ?> — <?php echo $ev['pts']; ?> pts</span>
+            <span class="ric-det-chev">&#8964;</span>
           </div>
-          <?php endforeach; ?>
-          <?php if (!empty($catsEnCurso[$idEv])): ?>
-          <div class="ric-det-row" style="border-top:none !important;">
-            <div class="ric-det-cat" style="font-style:italic;color:#9ca3af !important;">
-              <?php echo $catsEnCurso[$idEv]; ?> categoría<?php echo $catsEnCurso[$idEv] == 1 ? '' : 's'; ?> en curso — todavía no puntúa<?php echo $catsEnCurso[$idEv] == 1 ? '' : 'n'; ?>
+          <div id="<?php echo $detCat; ?>" class="ric-det-cats">
+            <?php foreach ($ev['cats'] as $d): ?>
+            <div class="ric-det-row">
+              <div class="ric-det-cat"><?php echo ric_txt($d['cat']); ?></div>
+              <div class="ric-det-pos p<?php echo $d['pos']; ?>"><?php echo $d['label']; ?></div>
+              <div class="ric-det-pts"><?php echo $d['pts']; ?></div>
             </div>
+            <?php endforeach; ?>
+            <?php if (!empty($catsEnCurso[$idEv])): ?>
+            <div class="ric-det-row" style="border-top:none !important;">
+              <div class="ric-det-cat" style="font-style:italic;color:#9ca3af !important;">
+                <?php echo $catsEnCurso[$idEv]; ?> categoría<?php echo $catsEnCurso[$idEv] == 1 ? '' : 's'; ?> en curso — todavía no puntúa<?php echo $catsEnCurso[$idEv] == 1 ? '' : 'n'; ?>
+              </div>
+            </div>
+            <?php endif; ?>
           </div>
-          <?php endif; ?>
         <?php endforeach; ?>
       </div>
       <?php endforeach; ?>
@@ -407,8 +419,9 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 </div>
 
 <script>
-function ricToggle(id) {
+function ricToggle(id, cab) {
   var d = document.getElementById(id);
   if (d) d.classList.toggle('open');
+  if (cab) cab.classList.toggle('abierta');
 }
 </script>
