@@ -244,22 +244,22 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 #ric-container .c-n.oro { color:#b45309 !important; font-weight:900 !important; }
 #ric-container .c-tot { width:76px !important; flex-shrink:0 !important; font-weight:900 !important; color:#16a34a !important; font-size:15px !important; }
 #ric-container .c-chev { width:30px !important; flex-shrink:0 !important; color:#9ca3af !important; font-size:12px !important; }
-#ric-container .ric-det { display:none !important; border-bottom:1px solid #eee !important; background:#f3f4f6 !important; padding:6px 14px 12px !important; }
+/* El detalle comparte el ancho de la tabla para que las columnas coincidan */
+#ric-container .ric-det { display:none !important; border-bottom:1px solid #eee !important; background:#f3f4f6 !important; padding:4px 0 8px !important; min-width:560px !important; }
 #ric-container .ric-det.open { display:block !important; }
+#ric-container .ric-dt { padding:6px 6px !important; text-align:center !important; font-size:12px !important; }
+#ric-container .ric-dt.c-n.val { color:#2563eb !important; font-weight:800 !important; }
+#ric-container .ric-dt.c-n.val.p1 { color:#b45309 !important; font-weight:900 !important; }
+#ric-container .ric-det-lbl { display:block !important; font-size:10px !important; font-weight:600 !important; color:#9ca3af !important; text-transform:uppercase !important; letter-spacing:.03em !important; line-height:1.4 !important; }
 /* Fecha dentro del detalle del club: se despliega para ver sus categorías */
-#ric-container .ric-det-ev { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; cursor:pointer !important; font-size:11px !important; font-weight:800 !important; text-transform:uppercase !important; letter-spacing:.05em !important; color:#1e3a5f !important; padding:10px 8px !important; margin-top:6px !important; background:#e8eef5 !important; border-radius:7px !important; }
+#ric-container .ric-det-ev { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; cursor:pointer !important; min-width:560px !important; font-size:11px !important; font-weight:800 !important; text-transform:uppercase !important; letter-spacing:.05em !important; color:#1e3a5f !important; padding:10px 8px !important; margin-top:6px !important; background:#e8eef5 !important; border-radius:7px !important; }
 #ric-container .ric-det-ev:hover { background:#dde6f0 !important; }
 #ric-container .ric-det-chev { font-size:12px !important; color:#64748b !important; transition:transform .2s !important; }
 #ric-container .ric-det-ev.abierta .ric-det-chev { transform:rotate(180deg) !important; }
-#ric-container .ric-det-cats { display:none !important; padding:0 8px 6px !important; }
+#ric-container .ric-det-cats { display:none !important; padding:0 !important; }
 #ric-container .ric-det-cats.open { display:block !important; }
-#ric-container .ric-det-row { display:flex !important; align-items:center !important; border-top:1px solid #e5e7eb !important; padding:6px 0 !important; }
-#ric-container .ric-det-cat { flex:1 !important; font-size:12px !important; color:#374151 !important; font-weight:600 !important; }
-#ric-container .ric-det-pos { width:110px !important; font-size:11px !important; font-weight:800 !important; color:#6b7280 !important; text-align:right !important; }
-#ric-container .ric-det-pos.p1 { color:#b45309 !important; }
-#ric-container .ric-det-pos.p2 { color:#64748b !important; }
-#ric-container .ric-det-pos.p3 { color:#92400e !important; }
-#ric-container .ric-det-pts { width:56px !important; font-size:12px !important; font-weight:800 !important; color:#2563eb !important; text-align:right !important; }
+#ric-container .ric-det-row { display:flex !important; align-items:center !important; border-top:1px solid #e5e7eb !important; min-width:560px !important; }
+#ric-container .ric-det-cat { font-size:12px !important; color:#374151 !important; font-weight:600 !important; text-align:left !important; }
 #ric-container .ric-nota { font-size:11px !important; color:#6b7280 !important; text-align:center !important; margin:14px 0 0 !important; line-height:1.5 !important; }
 #ric-container .ric-vacio { text-align:center !important; color:#6b7280 !important; padding:46px 20px !important; font-size:14px !important; }
 @media (max-width:480px) {
@@ -267,6 +267,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
   #ric-container .ric-bname { width:96px !important; font-size:10px !important; }
   #ric-container .ric-th { font-size:9px !important; padding:7px 4px !important; }
   #ric-container .ric-td { font-size:12px !important; padding:9px 4px !important; }
+  #ric-container .ric-dt { font-size:11px !important; padding:7px 4px !important; }
   #ric-container .c-n { width:44px !important; }
   #ric-container .c-tot { width:62px !important; font-size:13px !important; }
 }
@@ -377,15 +378,23 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
           </div>
           <div id="<?php echo $detCat; ?>" class="ric-det-cats">
             <?php foreach ($ev['cats'] as $d): ?>
+            <!-- El puntaje cae en la MISMA columna que su posición en la cabecera -->
             <div class="ric-det-row">
-              <div class="ric-det-cat"><?php echo ric_txt($d['cat']); ?></div>
-              <div class="ric-det-pos p<?php echo $d['pos']; ?>"><?php echo $d['label']; ?></div>
-              <div class="ric-det-pts"><?php echo $d['pts']; ?></div>
+              <div class="ric-dt c-pos"></div>
+              <div class="ric-dt c-club ric-det-cat"><?php echo ric_txt($d['cat']); ?>
+                <span class="ric-det-lbl"><?php echo $d['label']; ?></span>
+              </div>
+              <?php foreach ([0, 4, 3, 2, 1] as $col): ?>
+              <div class="ric-dt c-n<?php echo $d['pos'] === $col ? ' val p' . $col : ''; ?>"><?php echo $d['pos'] === $col ? $d['pts'] : ''; ?></div>
+              <?php endforeach; ?>
+              <div class="ric-dt c-tot"></div>
+              <div class="ric-dt c-chev"></div>
             </div>
             <?php endforeach; ?>
             <?php if (!empty($catsEnCurso[$idEv])): ?>
             <div class="ric-det-row" style="border-top:none !important;">
-              <div class="ric-det-cat" style="font-style:italic;color:#9ca3af !important;">
+              <div class="ric-dt c-pos"></div>
+              <div class="ric-dt c-club ric-det-cat" style="font-style:italic;color:#9ca3af !important;">
                 <?php echo $catsEnCurso[$idEv]; ?> categoría<?php echo $catsEnCurso[$idEv] == 1 ? '' : 's'; ?> en curso — todavía no puntúa<?php echo $catsEnCurso[$idEv] == 1 ? '' : 'n'; ?>
               </div>
             </div>
