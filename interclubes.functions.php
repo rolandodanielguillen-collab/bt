@@ -39,6 +39,71 @@ function ic_criterio_viejo(int $idEvento, int $idCat): bool {
     return in_array($idCat, IC_CATS_CRITERIO_VIEJO[$idEvento] ?? [], true);
 }
 
+/**
+ * Ranking de clubes (2026-08-10): puntos por posición final en cada categoría.
+ * [posición => puntos]; posición 0 = eliminado en fase de grupos = PARTICIPACIÓN.
+ * Un evento puede pisar estos valores cargando su matriz en el admin
+ * ("Puntajes por evento") — ver ic_puntos_evento().
+ */
+const IC_PUNTOS_POSICION = [1 => 100, 2 => 75, 3 => 60, 4 => 50, 0 => 30];
+
+/** Etiqueta de _p_etiquetas equivalente a cada posición, para leer la matriz del admin. */
+const IC_ETIQUETA_POSICION = [1 => 8, 2 => 6, 3 => 10, 4 => 4, 0 => 1]; // CAMPEONES/VICE/TERCER/SEMI/GRUPOS
+
+/**
+ * Posición final de cada club en UNA categoría de interclubes.
+ * $clubes: [id_club => nombre] del sorteo · $llaves: [fase => ['clubA'=>,'clubB'=>]]
+ * $partidos: filas de _ic_partidos de esa categoría (todas las fases).
+ * Devuelve [id_club => posición] con 1..4 y 0 = participación, o [] si la final
+ * todavía no está definida (la categoría no puntúa hasta que se decide).
+ */
+function ic_posiciones_categoria(array $clubes, array $llaves, array $partidos): array {
+    $ganPerd = function (string $fase) use ($llaves, $partidos): array {
+        if (!isset($llaves[$fase])) return [0, 0];
+        $a = (int)$llaves[$fase]['clubA']; $b = (int)$llaves[$fase]['clubB'];
+        $ms = array_values(array_filter($partidos, fn($m) => $m['fase'] === $fase));
+        [, , $definida, $ganador] = ic_estado_serie($ms, $a, $b, IC_SLOTS_SERIE);
+        return $definida ? [$ganador, $ganador === $a ? $b : $a] : [0, 0];
+    };
+    [$campeon, $vice] = $ganPerd('final');
+    if (!$campeon) return [];
+    $pos = [$campeon => 1, $vice => 2];
+    [$tercero, $cuarto] = $ganPerd('tercer');
+    if ($tercero) {
+        $pos[$tercero] = 3; $pos[$cuarto] = 4;
+    } else {
+        // 3er puesto sin jugar: los dos perdedores de semis son 4tos, no participación
+        foreach (['semi1', 'semi2'] as $f) foreach (['clubA', 'clubB'] as $k)
+            if (isset($llaves[$f]) && !isset($pos[(int)$llaves[$f][$k]])) $pos[(int)$llaves[$f][$k]] = 4;
+    }
+    foreach (array_keys($clubes) as $idClub) if (!isset($pos[$idClub])) $pos[$idClub] = 0;
+    return $pos;
+}
+
+/**
+ * Matriz de puntos cargada en el admin para estos eventos, traducida a posiciones:
+ * [id_evento][id_categoria][posición] => puntos. Lo que no esté cargado cae en
+ * IC_PUNTOS_POSICION (ver ic_puntos_pos).
+ */
+function ic_puntos_matriz(mysqli $db, array $idEventos): array {
+    if (!$idEventos) return [];
+    $ids = implode(',', array_map('intval', $idEventos));
+    $posDeEtiqueta = array_flip(IC_ETIQUETA_POSICION);
+    $res = $db->query("SELECT id_evento, id_categoria, id_etiqueta, puntos
+                         FROM _relacion_etiquetas_eventos WHERE id_evento IN ({$ids})");
+    $out = [];
+    while ($r = $res->fetch_assoc()) {
+        $etq = (int)$r['id_etiqueta'];
+        if (!isset($posDeEtiqueta[$etq])) continue;
+        $out[(int)$r['id_evento']][(int)$r['id_categoria']][$posDeEtiqueta[$etq]] = (int)$r['puntos'];
+    }
+    return $out;
+}
+
+function ic_puntos_pos(array $matriz, int $idEvento, int $idCat, int $pos): int {
+    return $matriz[$idEvento][$idCat][$pos] ?? (IC_PUNTOS_POSICION[$pos] ?? 0);
+}
+
 // Nombre para mostrar: primer nombre + primer apellido (pedido 2026-08-05).
 // $t: alias de tabla con punto ('u1.') o '' si la query no usa alias.
 function ic_sql_nombre_corto(string $t = ''): string {

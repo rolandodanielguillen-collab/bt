@@ -215,6 +215,11 @@ $top10Max = !empty($top10Global) ? $top10Global[0]['total'] : 1;
   border: none !important;
 }
 
+/* Pestañas Jugadores / Interclubes */
+#rk-container .rk-tabs { display:flex !important; gap:6px !important; background:#eef2f6 !important; border-radius:10px !important; padding:5px !important; margin:0 auto 18px !important; max-width:420px !important; }
+#rk-container .rk-tab { flex:1 !important; text-align:center !important; padding:9px 6px !important; border-radius:7px !important; font-size:12px !important; font-weight:800 !important; letter-spacing:.04em !important; text-decoration:none !important; color:#64748b !important; background:none !important; }
+#rk-container .rk-tab.on { background:#1e3a5f !important; color:#fff !important; box-shadow:0 1px 3px rgba(0,0,0,.15) !important; }
+
 /* Buscador */
 #rk-container .rk-form {
   display: flex !important;
@@ -589,6 +594,20 @@ $top10Max = !empty($top10Global) ? $top10Global[0]['total'] : 1;
 <div id="rk-container" style="max-width:860px; margin:0 auto; padding:0 12px 50px;">
 
   <h3 class="rk-titulo"><?php echo $h1; ?></h3>
+
+  <?php
+  // Pestaña INTERCLUBES: solo si el circuito tiene algún evento de ese tipo
+  $rkHayIC=(int)($mysqli2->query("SELECT COUNT(*) c FROM _p_eventos
+      WHERE id_circuito={$idcircuito} AND id_tipo_evento=5 AND estado IN ('activo','culminado')")
+      ->fetch_assoc()['c'] ?? 0);
+  if($rkHayIC):
+      $rkQs='url='.urlencode($_GET['url'] ?? '').(isset($_GET['v3'])?'&v3':'');
+  ?>
+  <div class="rk-tabs">
+    <a class="rk-tab on" href="?<?php echo htmlspecialchars($rkQs); ?>">JUGADORES</a>
+    <a class="rk-tab" href="?<?php echo htmlspecialchars($rkQs); ?>&amp;ic">INTERCLUBES</a>
+  </div>
+  <?php endif; ?>
 
   <?php if($buscado<>''): ?>
     <div style="margin-bottom:16px; font-size:13px;"><?php echo str_replace("%"," ",$buscado); ?></div>
