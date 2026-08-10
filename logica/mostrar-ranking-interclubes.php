@@ -66,10 +66,8 @@ if ($idcircuito) {
 }
 if ($fechasPendientes > 0) $circuitoCerrado = false;
 
-// Número de fecha dentro del circuito (los eventos ya vienen ordenados por fecha)
-$nroFecha = [];
-$n = 0;
-foreach (array_keys($eventosIC) as $idEv) $nroFecha[$idEv] = ++$n;
+// Cada fecha se muestra con el nombre que la organización le puso en el admin
+// (_p_eventos.evento). Nada de numerarlas acá.
 
 // Selector de evento: TODOS (acumulado) o uno solo
 $evSel = isset($_GET['ev']) ? abs((int)$_GET['ev']) : 0;
@@ -291,7 +289,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
   <div class="ric-evs">
     <a class="ric-ev <?php echo $evSel ? '' : 'on'; ?>" href="?<?php echo $qsIC; ?>">CIRCUITO</a>
     <?php foreach ($eventosIC as $idEv => $nomEv): ?>
-    <a class="ric-ev <?php echo $evSel === $idEv ? 'on' : ''; ?>" href="?<?php echo $qsIC; ?>&amp;ev=<?php echo $idEv; ?>"><?php echo $nroFecha[$idEv]; ?>ª FECHA</a>
+    <a class="ric-ev <?php echo $evSel === $idEv ? 'on' : ''; ?>" href="?<?php echo $qsIC; ?>&amp;ev=<?php echo $idEv; ?>"><?php echo ric_txt($nomEv); ?></a>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
@@ -300,7 +298,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
   // Con una fecha elegida: campeón de esa fecha. En el acumulado: campeón del
   // circuito solo si el circuito ya cerró; mientras corre hay LÍDER, no campeón.
   $esCampeon = $evSel || $circuitoCerrado;
-  $heroLbl = $evSel ? ($nroFecha[$evSel] . 'ª fecha · Campeón')
+  $heroLbl = $evSel ? ('🏆 Campeón · ' . ric_txt($eventosIC[$evSel]))
                     : ($circuitoCerrado ? '🏆 Campeón del Circuito' : 'Líder del Circuito');
   ?>
   <div class="ric-hero <?php echo $esCampeon ? '' : 'lider'; ?>">
@@ -318,7 +316,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
     <?php if (!$evSel && count($eventosVer) > 1): ?>
     <div class="ric-hero-evs">
       <?php foreach ($eventosVer as $idEv => $nomEv): if (!isset($campeonEvento[$idEv])) continue; ?>
-        <div><?php echo $nroFecha[$idEv]; ?>ª fecha · <?php echo ric_txt($nomEv); ?>: <strong><?php echo implode(' + ', array_map('ric_txt', $campeonEvento[$idEv])); ?></strong></div>
+        <div><?php echo ric_txt($nomEv); ?>: <strong><?php echo implode(' + ', array_map('ric_txt', $campeonEvento[$idEv])); ?></strong></div>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
@@ -373,7 +371,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
       <div id="<?php echo $det; ?>" class="ric-det">
         <?php foreach ($c['eventos'] as $idEv => $ev): $detCat = $det . '-' . $idEv; ?>
           <div class="ric-det-ev" onclick="ricToggle('<?php echo $detCat; ?>', this)">
-            <span><?php echo $nroFecha[$idEv]; ?>ª fecha · <?php echo ric_txt($eventosIC[$idEv] ?? ''); ?> — <?php echo $ev['pts']; ?> pts</span>
+            <span><?php echo ric_txt($eventosIC[$idEv] ?? ''); ?> — <?php echo $ev['pts']; ?> pts</span>
             <span class="ric-det-chev">&#8964;</span>
           </div>
           <div id="<?php echo $detCat; ?>" class="ric-det-cats">
