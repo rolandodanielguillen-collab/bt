@@ -7,3 +7,4 @@
 - [Sesión 2026-07-21](project_sesion_2026-07-21.md) — Fix ranking por SETS (no games) + bracket muestra 3 sets + salvaguarda grupos + orden torneos por fecha real
 - [Interclubes](project_interclubes.md) — Nuevo sistema: clubes inscriben hasta 2 parejas/categoría vía URL con token; análisis 2026-08-01, plan pendiente de aprobación
 - [Sesión 2026-08-05](project_interclubes.md) — Fix llaves públicas respetan visualizar_en_llaves (c84fa20) + admin cliente redirect a cargador e interclubes abre interclubes_resultados (dac29c9)
+- [Ranking Interclubes](project_interclubes_ranking.md) — LIVE 2026-08-10: ranking de CLUBES del circuito (?ic), puntos por posición y por fecha configurables en el admin, líder vs campeón del circuito, pantallas Circuitos y Puntajes IC, móvil sin scroll lateral

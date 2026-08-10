@@ -242,6 +242,12 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 #ric-container .c-n.oro { color:#b45309 !important; font-weight:900 !important; }
 #ric-container .c-tot { width:76px !important; flex-shrink:0 !important; font-weight:900 !important; color:#16a34a !important; font-size:15px !important; }
 #ric-container .c-chev { width:30px !important; flex-shrink:0 !important; color:#9ca3af !important; font-size:12px !important; }
+/* Rayas verticales: cabecera, fila del club y fila de categoría comparten la
+   misma rejilla, así se lee de qué columna es cada número. */
+#ric-container .c-n, #ric-container .c-tot { border-left:1px solid #e8edf3 !important; }
+#ric-container .ric-thead .c-n { border-left-color:#dde4ec !important; }
+#ric-container .c-tot { border-left-color:#cbd5e1 !important; }
+#ric-container .ric-det-row .c-n, #ric-container .ric-det-row .c-tot { border-left-color:#e2e7ee !important; }
 /* El detalle comparte el ancho de la tabla para que las columnas coincidan */
 #ric-container .ric-det { display:none !important; border-bottom:1px solid #eee !important; background:#f3f4f6 !important; padding:4px 0 8px !important; min-width:560px !important; }
 #ric-container .ric-det.open { display:block !important; }
@@ -279,11 +285,7 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
   #ric-container .c-tot  { width:44px !important; flex:0 0 44px !important; }
   #ric-container .c-chev { display:none !important; }   /* la fila entera es el botón */
 
-  /* Rayas de columna: de la cabecera hasta la última categoría del detalle */
-  #ric-container .c-n, #ric-container .c-tot { border-left:1px solid #e3e9f0 !important; }
-  #ric-container .ric-thead .c-n { border-left-color:#d3dce6 !important; }
-  #ric-container .c-tot { border-left-color:#cbd5e1 !important; }
-
+  /* (las rayas de columna vienen del bloque base, valen en las dos vistas) */
   #ric-container .ric-th { font-size:9px !important; padding:7px 1px !important; letter-spacing:0 !important; }
   #ric-container .ric-th.c-pos { font-size:8px !important; }
   #ric-container .ric-td { font-size:12px !important; padding:7px 1px !important; }
