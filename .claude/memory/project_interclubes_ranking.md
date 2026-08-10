@@ -116,6 +116,21 @@ correcto hasta que se juegue la última fecha. Cuando la organización cierre el
 circuito, cargar la fecha de fin en Admin → Circuitos y el hero pasa a CAMPEÓN
 DEL CIRCUITO (dorado).
 
+## 5ta tanda 2026-08-10 — presentación
+- Detalle del club en DOS niveles: club → fecha (colapsada, con su nombre y sus
+  puntos) → categorías. Antes abría directo en las categorías.
+- Los puntajes del detalle caen EN LA COLUMNA de la posición lograda (mismos
+  anchos que la cabecera); se sacó el padding del detalle que los desalineaba.
+- **Nada de numerar las fechas en el código**: el nombre de cada fecha sale de
+  `_p_eventos.evento`, que la organización configura en el admin (el usuario ya
+  renombró ev15 a "1°. FECHA"). Se eliminó el `$nroFecha` que anteponía "1ª fecha ·".
+- **Móvil (≤600px): la tabla de 9 columnas se convierte en tarjeta de 2 líneas**
+  (puesto + club + total arriba; los 5 contadores con su etiqueta abajo, en
+  chips). Sin scroll horizontal y sin perder información. Es SOLO CSS + un
+  `data-lbl` por celda que la etiqueta se imprime con `::before` (la cabecera se
+  oculta en móvil). En el detalle, en móvil, se ocultan las celdas vacías y queda
+  categoría a la izquierda / puntaje a la derecha.
+
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
   normalizado (`ric_clave`: mayúsculas, sin acentos, espacios colapsados). NO hay
