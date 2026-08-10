@@ -36,25 +36,13 @@ function ric_txt($s): string {
     return htmlspecialchars(mb_strtoupper(trim((string)$s), 'UTF-8'));
 }
 
-/**
- * Clave para reconocer al mismo club entre eventos: _p_clubes tiene id_evento,
- * así que el mismo club en otro evento es otra fila con otro id. Se agrupa por
- * nombre normalizado (mayúsculas, sin acentos, espacios colapsados).
- * ponytail: si un club se auto-registra con otro nombre, el superadmin lo renombra
- * desde el admin (tab Clubes). Tabla maestra de clubes recién si eso no alcanza.
- */
-function ric_clave($nombre): string {
-    if (!mb_check_encoding((string)$nombre, 'UTF-8')) $nombre = mb_convert_encoding($nombre, 'UTF-8', 'ISO-8859-1');
-    $n = mb_strtoupper(trim((string)$nombre), 'UTF-8');
-    $n = strtr($n, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','À'=>'A','Ã'=>'A','Ê'=>'E','Ô'=>'O','Ç'=>'C']);
-    return preg_replace('/\s+/', ' ', $n);
-}
-
 // ── Eventos interclubes del circuito ─────────────────────────────────────────
+// Solo CULMINADOS (regla del usuario 2026-08-10): un torneo suma al ranking
+// recién cuando la organización lo cierra, igual que el ranking de jugadores.
 $eventosIC = [];
 if ($idcircuito) {
     $st = $mysqli2->prepare("SELECT id, evento, fecha FROM _p_eventos
-        WHERE id_circuito=? AND id_tipo_evento=5 AND estado IN ('activo','culminado')
+        WHERE id_circuito=? AND id_tipo_evento=5 AND estado='culminado'
         ORDER BY fecha ASC, id ASC");
     $st->bind_param('i', $idcircuito);
     $st->execute();
@@ -63,12 +51,17 @@ if ($idcircuito) {
     $st->close();
 }
 
+// Selector de evento: TODOS (acumulado) o uno solo
+$evSel = isset($_GET['ev']) ? abs((int)$_GET['ev']) : 0;
+if (!isset($eventosIC[$evSel])) $evSel = 0;
+$eventosVer = $evSel ? [$evSel => $eventosIC[$evSel]] : $eventosIC;
+
 $ranking = [];      // clave de club => fila del ranking
 $catNombre = [];    // id_categoria => nombre
 $catsEnCurso = [];  // id_evento => cantidad de categorías sin final definida
 
-if ($eventosIC) {
-    $ids = implode(',', array_map('intval', array_keys($eventosIC)));
+if ($eventosVer) {
+    $ids = implode(',', array_map('intval', array_keys($eventosVer)));
 
     $clubes = [];   // id_evento => [id_club => nombre]
     $res = $mysqli2->query("SELECT id, id_evento, nombre FROM _p_clubes WHERE id_evento IN ({$ids})");
@@ -92,11 +85,11 @@ if ($eventosIC) {
     $res = $mysqli2->query("SELECT id, categoria FROM _p_categorias");
     while ($r = $res->fetch_assoc()) $catNombre[(int)$r['id']] = $r['categoria'];
 
-    $matriz = ic_puntos_matriz($mysqli2, array_keys($eventosIC));
+    $matriz = ic_puntos_matriz($mysqli2, array_keys($eventosVer));
 
     $etiquetaPos = [1 => 'Campeón', 2 => 'Finalista', 3 => 'Tercer puesto', 4 => 'Cuarto puesto', 0 => 'Participación'];
 
-    foreach ($eventosIC as $idEv => $nombreEv) {
+    foreach ($eventosVer as $idEv => $nombreEv) {
         $catsEnCurso[$idEv] = 0;
         $catsEv = $sorteo[$idEv] ?? [];
         uksort($catsEv, fn($a, $b) => strcmp($catNombre[$a] ?? '', $catNombre[$b] ?? ''));
@@ -111,7 +104,7 @@ if ($eventosIC) {
             foreach ($posiciones as $idClub => $pos) {
                 $nombreClub = $clubesCat[$idClub] ?? '';
                 if ($nombreClub === '') continue;
-                $k = ric_clave($nombreClub);
+                $k = ic_clave_club($nombreClub);
                 if (!isset($ranking[$k])) {
                     $ranking[$k] = ['nombre' => $nombreClub, 'total' => 0,
                                     'conteo' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 0 => 0], 'eventos' => []];
@@ -119,8 +112,10 @@ if ($eventosIC) {
                 $pts = ic_puntos_pos($matriz, $idEv, $idCat, $pos);
                 $ranking[$k]['total'] += $pts;
                 $ranking[$k]['conteo'][$pos]++;
-                if (!isset($ranking[$k]['eventos'][$idEv])) $ranking[$k]['eventos'][$idEv] = ['pts' => 0, 'cats' => []];
+                if (!isset($ranking[$k]['eventos'][$idEv]))
+                    $ranking[$k]['eventos'][$idEv] = ['pts' => 0, 'conteo' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 0 => 0], 'cats' => []];
                 $ranking[$k]['eventos'][$idEv]['pts'] += $pts;
+                $ranking[$k]['eventos'][$idEv]['conteo'][$pos]++;
                 $ranking[$k]['eventos'][$idEv]['cats'][] = [
                     'cat'   => $catNombre[$idCat] ?? "Cat. {$idCat}",
                     'pos'   => $pos,
@@ -151,8 +146,23 @@ if ($ranking) {
 }
 $maxPts = $ranking ? max(1, $ranking[0]['total']) : 1;
 
-// Pestañas: mismos parámetros de la URL, con y sin ?ic
+// Campeón de CADA evento (mismo desempate, dentro del evento): [id_evento => nombres]
+$campeonEvento = [];
+foreach (array_keys($eventosVer) as $idEv) {
+    $mejor = null; $nombres = [];
+    foreach ($ranking as $c) {
+        if (!isset($c['eventos'][$idEv])) continue;
+        $e = $c['eventos'][$idEv];
+        $k = [$e['pts'], $e['conteo'][1], $e['conteo'][2], $e['conteo'][3], $e['conteo'][4]];
+        if ($mejor === null || $k > $mejor) { $mejor = $k; $nombres = [$c['nombre']]; }
+        elseif ($k === $mejor) $nombres[] = $c['nombre'];
+    }
+    if ($nombres) $campeonEvento[$idEv] = $nombres;
+}
+
+// Pestañas y selector: mismos parámetros de la URL
 $qsBase = 'url=' . urlencode($_GET['url'] ?? '') . (isset($_GET['v3']) ? '&v3' : '');
+$qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 ?>
 
 <style type="text/css">
@@ -167,6 +177,12 @@ $qsBase = 'url=' . urlencode($_GET['url'] ?? '') . (isset($_GET['v3']) ? '&v3' :
 #ric-container .ric-hero-lbl { font-size:10px !important; font-weight:800 !important; letter-spacing:.14em !important; color:#5c470a !important; text-transform:uppercase !important; }
 #ric-container .ric-hero-club { font-size:22px !important; font-weight:900 !important; color:#3d2f05 !important; margin:4px 0 2px !important; line-height:1.2 !important; }
 #ric-container .ric-hero-sub { font-size:12px !important; font-weight:700 !important; color:#6b5410 !important; }
+#ric-container .ric-hero-evs { font-size:11px !important; font-weight:600 !important; color:#6b5410 !important; margin-top:8px !important; padding-top:8px !important; border-top:1px solid rgba(93,71,10,.25) !important; line-height:1.6 !important; }
+/* Selector de evento */
+#ric-container .ric-evs { display:flex !important; flex-wrap:wrap !important; gap:6px !important; justify-content:center !important; margin-bottom:16px !important; }
+#ric-container .ric-ev { font-size:11px !important; font-weight:700 !important; padding:7px 14px !important; border-radius:999px !important; text-decoration:none !important; background:#fff !important; color:#374151 !important; border:1px solid #d7dee7 !important; }
+#ric-container .ric-ev.on { background:#1e3a5f !important; color:#fff !important; border-color:#1e3a5f !important; }
+#ric-container .c-club small { display:block !important; font-size:10px !important; font-weight:600 !important; color:#9ca3af !important; line-height:1.4 !important; }
 /* Barras top clubes */
 #ric-container .ric-top { background:linear-gradient(135deg,#1e3a5f 0%,#0f2744 100%) !important; border-radius:12px !important; padding:20px 18px 16px !important; margin-bottom:20px !important; box-shadow:0 4px 20px rgba(0,0,0,.25) !important; }
 #ric-container .ric-top-title { font-size:14px !important; font-weight:800 !important; color:#fff !important; margin:0 0 14px !important; text-transform:uppercase !important; letter-spacing:.06em !important; }
@@ -226,17 +242,34 @@ $qsBase = 'url=' . urlencode($_GET['url'] ?? '') . (isset($_GET['v3']) ? '&v3' :
   </div>
 
 <?php if (!$ranking): ?>
-  <div class="ric-vacio">Todavía no hay resultados de interclubes en este circuito.</div>
+  <div class="ric-vacio">Todavía no hay torneos interclubes culminados en este circuito.<br>
+    <span style="font-size:12px;">Cada torneo entra al ranking cuando la organización lo cierra.</span></div>
 <?php else: ?>
 
+  <?php if (count($eventosIC) > 1): ?>
+  <div class="ric-evs">
+    <a class="ric-ev <?php echo $evSel ? '' : 'on'; ?>" href="?<?php echo $qsIC; ?>">GENERAL</a>
+    <?php foreach ($eventosIC as $idEv => $nomEv): ?>
+    <a class="ric-ev <?php echo $evSel === $idEv ? 'on' : ''; ?>" href="?<?php echo $qsIC; ?>&amp;ev=<?php echo $idEv; ?>"><?php echo ric_txt($nomEv); ?></a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
   <div class="ric-hero">
-    <div class="ric-hero-lbl">🏆 Campeón General</div>
+    <div class="ric-hero-lbl">🏆 <?php echo $evSel ? 'Campeón del evento' : 'Campeón General'; ?></div>
     <div class="ric-hero-club"><?php echo implode(' + ', array_map(fn($c) => ric_txt($c['nombre']), $campeones)); ?></div>
     <div class="ric-hero-sub">
       <?php echo $campeones[0]['total']; ?> pts ·
       <?php echo $campeones[0]['conteo'][1]; ?> título<?php echo $campeones[0]['conteo'][1] == 1 ? '' : 's'; ?>
       <?php echo count($campeones) > 1 ? ' · empate en la cima' : ''; ?>
     </div>
+    <?php if (!$evSel && count($eventosVer) > 1): ?>
+    <div class="ric-hero-evs">
+      <?php foreach ($eventosVer as $idEv => $nomEv): if (!isset($campeonEvento[$idEv])) continue; ?>
+        <div><?php echo ric_txt($nomEv); ?>: <strong><?php echo implode(' + ', array_map('ric_txt', $campeonEvento[$idEv])); ?></strong></div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
   </div>
 
   <div class="ric-top">
@@ -269,7 +302,9 @@ $qsBase = 'url=' . urlencode($_GET['url'] ?? '') . (isset($_GET['v3']) ? '&v3' :
       <?php foreach ($ranking as $i => $c): $det = 'ricd-' . $i; ?>
       <div class="ric-row <?php echo $i % 2 ? 'par' : ''; ?>" onclick="ricToggle('<?php echo $det; ?>')">
         <div class="ric-td c-pos"><?php echo $i + 1; ?></div>
-        <div class="ric-td c-club"><?php echo ric_txt($c['nombre']); ?></div>
+        <div class="ric-td c-club"><?php echo ric_txt($c['nombre']); ?>
+          <?php if (!$evSel && count($eventosVer) > 1): ?><small><?php echo count($c['eventos']); ?> de <?php echo count($eventosVer); ?> eventos</small><?php endif; ?>
+        </div>
         <div class="ric-td c-n"><?php echo $c['conteo'][0]; ?></div>
         <div class="ric-td c-n"><?php echo $c['conteo'][4]; ?></div>
         <div class="ric-td c-n"><?php echo $c['conteo'][3]; ?></div>
@@ -306,7 +341,8 @@ $qsBase = 'url=' . urlencode($_GET['url'] ?? '') . (isset($_GET['v3']) ? '&v3' :
     Campeón <?php echo IC_PUNTOS_POSICION[1]; ?> · Finalista <?php echo IC_PUNTOS_POSICION[2]; ?> ·
     Tercer puesto <?php echo IC_PUNTOS_POSICION[3]; ?> · Cuarto <?php echo IC_PUNTOS_POSICION[4]; ?> ·
     Participación <?php echo IC_PUNTOS_POSICION[0]; ?>, en cada categoría.<br>
-    Desempate: más títulos, después finales, terceros y cuartos puestos.
+    Desempate: más títulos, después finales, terceros y cuartos puestos.<br>
+    Suman los torneos interclubes ya culminados del circuito.
   </div>
 
 <?php endif; ?>

@@ -104,6 +104,53 @@ function ic_puntos_pos(array $matriz, int $idEvento, int $idCat, int $pos): int 
     return $matriz[$idEvento][$idCat][$pos] ?? (IC_PUNTOS_POSICION[$pos] ?? 0);
 }
 
+/**
+ * Identidad de un club ENTRE eventos. `_p_clubes` es por evento, así que el mismo
+ * club en el evento siguiente es otra fila: el ranking histórico los junta por
+ * este nombre normalizado — mayúsculas, sin acentos, sin puntuación
+ * ("MOES - YOYI" = "MOES-YOYI") y espacios colapsados.
+ * ponytail: NO adivina abreviaciones ("LUJINI" ≠ "LUJINI BEACH TENNIS"); eso lo
+ * evita la lista del formulario de registro, y si igual pasa, el superadmin renombra.
+ */
+function ic_clave_club($nombre): string {
+    if (!mb_check_encoding((string)$nombre, 'UTF-8')) $nombre = mb_convert_encoding($nombre, 'UTF-8', 'ISO-8859-1');
+    $n = mb_strtoupper(trim((string)$nombre), 'UTF-8');
+    $n = strtr($n, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N','À'=>'A','Ã'=>'A','Ê'=>'E','Ô'=>'O','Ç'=>'C']);
+    $n = preg_replace('/[^\p{L}\p{N} ]+/u', ' ', $n);   // puntuación fuera
+    return trim(preg_replace('/\s+/', ' ', $n));
+}
+
+/**
+ * Clubes que ya jugaron OTROS interclubes: [clave => nombre canónico] (el más
+ * reciente gana). Alimenta la lista del formulario de registro y el reuso de
+ * nombre, para que el ranking histórico no se parta en dos filas por un tipeo.
+ */
+function ic_clubes_previos(mysqli $db, int $idEventoActual): array {
+    $st = $db->prepare(
+        "SELECT c.nombre FROM _p_clubes c
+           JOIN _p_eventos e ON e.id = c.id_evento
+          WHERE e.id_tipo_evento = 5 AND c.id_evento <> ?
+            AND e.estado IN ('activo','registro','culminado')
+          ORDER BY e.fecha ASC, c.id ASC");
+    $st->bind_param('i', $idEventoActual);
+    $st->execute();
+    $res = $st->get_result();
+    $out = [];
+    while ($r = $res->fetch_assoc()) $out[ic_clave_club($r['nombre'])] = $r['nombre'];
+    return $out;
+}
+
+/**
+ * Nombre con el que este club ya está registrado en interclubes anteriores, o
+ * null si es nuevo. Se guarda ESE nombre y no el tipeado: "lujini beach tennis"
+ * y "Lujini Beach Tennis" son el mismo club en el ranking.
+ * ponytail: solo unifica lo que normaliza igual — las abreviaciones ("LUJINI")
+ * las evita la lista del formulario; si igual pasa una, el superadmin renombra.
+ */
+function ic_nombre_canonico(mysqli $db, int $idEventoActual, string $nombre): ?string {
+    return ic_clubes_previos($db, $idEventoActual)[ic_clave_club($nombre)] ?? null;
+}
+
 // Nombre para mostrar: primer nombre + primer apellido (pedido 2026-08-05).
 // $t: alias de tabla con punto ('u1.') o '' si la query no usa alias.
 function ic_sql_nombre_corto(string $t = ''): string {

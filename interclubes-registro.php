@@ -11,6 +11,7 @@
  */
 session_start();
 include_once "db/conection.inc.php";
+require_once "interclubes.functions.php";
 
 // ── Resolver evento por sha1(id) (mismo patrón que el resto del sitio) ───────
 $ev = isset($_GET['ev']) ? trim($_GET['ev']) : '';
@@ -52,6 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $abierta) {
     $cel    = preg_replace('/[^0-9]/', '', $_POST['celular'] ?? '');
     $mail   = filter_var(trim($_POST['email'] ?? ''), FILTER_SANITIZE_EMAIL);
 
+    // El mismo club en otro interclubes vuelve a registrarse: se guarda el nombre
+    // con el que ya está en el histórico, no el que tipeó ahora — si no, el
+    // ranking de clubes lo parte en dos filas ("LUJINI" vs "Lujini Beach Tennis").
+    $canonico = $nombre === '' ? null : ic_nombre_canonico($mysqli2, $idEvento, $nombre);
+    if ($canonico !== null) $nombre = $canonico;
+
     if ($nombre === '' || $resp === '' || $cel === '') {
         $error = 'Completá nombre del club, responsable y celular.';
     } elseif (mb_strlen($nombre) > 200) {
@@ -82,6 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $abierta) {
     $error = 'El registro está cerrado.';
 }
 
+// Clubes de interclubes anteriores: la lista del campo nombre (evita el tipeo libre)
+$clubesPrevios = $abierta ? ic_clubes_previos($mysqli2, $idEvento) : [];
+sort($clubesPrevios, SORT_NATURAL | SORT_FLAG_CASE);
+
 $flyerUrl = $eventoIC['flyer'] ? '/img/flyers/' . $eventoIC['flyer'] : '';
 $fechaFmt = ($eventoIC['fecha'] && $eventoIC['fecha'] !== '0000-00-00') ? date('d/m/Y', strtotime($eventoIC['fecha'])) : '';
 ?>
@@ -109,6 +120,7 @@ $fechaFmt = ($eventoIC['fecha'] && $eventoIC['fecha'] !== '0000-00-00') ? date('
   .campo { margin-bottom: 12px; }
   .campo label { display: block; font-size: 12px; color: var(--gris); margin-bottom: 4px; }
   .campo input { width: 100%; padding: 10px 11px; border: 1px solid var(--borde); border-radius: 8px; font-size: 15px; }
+  .campo .ayuda { font-size: 11px; color: var(--gris); margin-top: 4px; line-height: 1.4; }
   .btn { width: 100%; border: none; border-radius: 10px; cursor: pointer; font-size: 15px; font-weight: 700; padding: 13px; background: var(--azul); color: #fff; margin-top: 6px; }
   .error { background: #fdeaea; color: var(--err); border: 1px solid #f3c4c4; padding: 11px 13px; border-radius: 10px; font-size: 13px; margin-bottom: 14px; font-weight: 600; }
   .cerrada { background: #fff4e0; color: #9a6a12; border: 1px solid #f0ddb2; padding: 12px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; }
@@ -139,7 +151,14 @@ $fechaFmt = ($eventoIC['fecha'] && $eventoIC['fecha'] !== '0000-00-00') ? date('
     <form method="post">
       <div class="campo">
         <label>Nombre del club *</label>
-        <input type="text" name="nombre" required maxlength="200" value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>">
+        <input type="text" name="nombre" required maxlength="200" list="clubes-previos" autocomplete="off"
+               value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>">
+        <?php if ($clubesPrevios): ?>
+        <datalist id="clubes-previos">
+          <?php foreach ($clubesPrevios as $nomPrev): ?><option value="<?= htmlspecialchars($nomPrev) ?>"><?php endforeach; ?>
+        </datalist>
+        <div class="ayuda">Si tu club ya jugó un interclubes, elegilo de la lista para conservar tu historial en el ranking.</div>
+        <?php endif; ?>
       </div>
       <div class="campo">
         <label>Nombre del responsable *</label>

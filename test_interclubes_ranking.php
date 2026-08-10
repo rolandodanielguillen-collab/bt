@@ -69,5 +69,14 @@ $pos2 = ic_posiciones_categoria($nombres, $sinTercer, $serie('final', $LUJINI, $
 $check('perdedores de semis', [4, 4], [$pos2[$CSA4], $pos2[$VISTA]]);
 $check('el resto participación', [0, 0], [$pos2[$CHIQUI], $pos2[$MOES]]);
 
+echo "Identidad del club entre eventos (ic_clave_club)\n";
+$check('mayúsculas y espacios de más', ic_clave_club('Lujini Beach Tennis'), ic_clave_club('  lujini   beach tennis '));
+$check('acentos', ic_clave_club('MOES - YOYI'), ic_clave_club('Moés - Yoyi'));
+$check('puntuación: "MOES - YOYI" = "MOES-YOYI"', ic_clave_club('MOES - YOYI'), ic_clave_club('MOES-YOYI'));
+$check('clubes distintos NO se mezclan',
+    false, ic_clave_club('ARENA BAR') === ic_clave_club('ARENA BAR 2'));
+$check('abreviación NO se unifica sola (la evita la lista del formulario)',
+    false, ic_clave_club('LUJINI') === ic_clave_club('Lujini Beach Tennis'));
+
 echo $fallos ? "\n{$fallos} FALLAS\n" : "\nTodo ok\n";
 exit($fallos ? 1 : 0);

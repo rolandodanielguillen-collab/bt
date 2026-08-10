@@ -596,9 +596,10 @@ $top10Max = !empty($top10Global) ? $top10Global[0]['total'] : 1;
   <h3 class="rk-titulo"><?php echo $h1; ?></h3>
 
   <?php
-  // Pestaña INTERCLUBES: solo si el circuito tiene algún evento de ese tipo
+  // Pestaña INTERCLUBES: solo si el circuito tiene algún interclubes CULMINADO
+  // (un torneo suma al ranking recién cuando la organización lo cierra)
   $rkHayIC=(int)($mysqli2->query("SELECT COUNT(*) c FROM _p_eventos
-      WHERE id_circuito={$idcircuito} AND id_tipo_evento=5 AND estado IN ('activo','culminado')")
+      WHERE id_circuito={$idcircuito} AND id_tipo_evento=5 AND estado='culminado'")
       ->fetch_assoc()['c'] ?? 0);
   if($rkHayIC):
       $rkQs='url='.urlencode($_GET['url'] ?? '').(isset($_GET['v3'])?'&v3':'');

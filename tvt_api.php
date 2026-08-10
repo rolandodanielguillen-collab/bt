@@ -1911,9 +1911,13 @@ if ($action === 'clubes_evento') {
 
 // ACTION: crear_club — Alta de club con token único
 if ($action === 'crear_club') {
+    require_once __DIR__ . '/interclubes.functions.php';
     $idEvento = intGet('evento');
     $nombre   = trim(strGet('nombre'));
     if (!$idEvento || $nombre === '') respErr('Faltan evento o nombre del club');
+    // Club que ya jugó otro interclubes: se guarda con su nombre del histórico
+    // para que el ranking de clubes no lo parta en dos filas por un tipeo.
+    $nombre = ic_nombre_canonico($mysqli2, $idEvento, $nombre) ?? $nombre;
     $resp = trim(strGet('responsable'));
     $cel  = trim(strGet('celular'));
     $mail = trim(strGet('email'));

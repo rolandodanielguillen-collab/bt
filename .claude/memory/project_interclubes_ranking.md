@@ -34,6 +34,31 @@ por 15 pts, definido por los terceros puestos.
   markup); diff contra `.bak-20260810` = exactamente eso, nada más.
 - `test_interclubes_ranking.php` — 20 asserts sin DB, `php test_interclubes_ranking.php`.
 
+## 2da tanda 2026-08-10 — previsión multi-evento
+- **Solo eventos `culminado`** suman al ranking (regla del usuario; igual criterio
+  que el ranking de jugadores en el admin). Como ev15 sigue en `activo`, HOY el
+  ranking está vacío y la pestaña INTERCLUBES no aparece: se prende sola cuando
+  la organización pase el evento a culminado.
+- **Selector GENERAL · <evento> …** arriba (solo si hay más de un evento
+  culminado); con uno elegido, el hero dice "Campeón del evento".
+- Hero acumulado + línea de **campeones por evento**; bajo cada club, "N de M eventos".
+- **Anti-drift de nombres de club** (el problema real del 2do evento, porque
+  `_p_clubes` es por evento y el nombre es texto libre):
+  · `ic_clave_club()` normaliza mayúsculas, acentos, PUNTUACIÓN y espacios
+    ("MOES - YOYI" = "MOES-YOYI" — verificado, en el arnés pasaron de 2 filas a 1).
+  · `interclubes-registro.php`: `<datalist>` con los clubes de interclubes
+    anteriores (estados activo/registro/culminado — el demo ev16 queda afuera) y,
+    en el POST, se guarda el **nombre canónico** del histórico, no el tipeado.
+  · Mismo reuso en `tvt_api.php` → `crear_club` (alta desde el admin).
+  · Lo que NO resuelve solo: abreviaciones ("LUJINI" vs "Lujini Beach Tennis").
+    Para eso está la lista del formulario y, en última instancia, el superadmin.
+- Verificado con un arnés fuera del webroot (`/tmp`, copia del renderer con el
+  WHERE de eventos cambiado, ya borrado con safe-rm) forzando ev15+ev16:
+  campeones por evento OK (Munich→Vista Bar, Demo→Moes), acumulado OK
+  (Vista 845, Arena 520, Moes 600 ya unificado), `?ev=15` da exactamente
+  815/800/515/500/460/360, `?ev=16` solo el demo.
+- Backups de la 2da tanda: `.bak2-20260810`.
+
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
   normalizado (`ric_clave`: mayúsculas, sin acentos, espacios colapsados). NO hay
