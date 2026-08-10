@@ -106,6 +106,9 @@ que cargarla en la grilla de 16 etiquetas × 10 categorías. Ahora:
 - GOTCHA: hay un `/tmp/interclubes.functions.php` viejo (07-ago) en el VPS; un
   harness en /tmp con `__DIR__` lo levanta en vez del de public_html.
 
+**Móvil CONFIRMADO por el usuario en su teléfono (2026-08-10): "quedó bien".**
+No reabrir la discusión de layout móvil sin pedido explícito.
+
 ## Estado al cierre 2026-08-10
 Usuario confirmó que las dos pantallas nuevas (Puntajes de interclubes y
 Circuitos) se ven y andan. `guardar_circuito` probado ejecutando el bloque real:
