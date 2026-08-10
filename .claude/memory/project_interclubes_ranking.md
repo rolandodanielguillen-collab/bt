@@ -106,6 +106,16 @@ que cargarla en la grilla de 16 etiquetas × 10 categorías. Ahora:
 - GOTCHA: hay un `/tmp/interclubes.functions.php` viejo (07-ago) en el VPS; un
   harness en /tmp con `__DIR__` lo levanta en vez del de public_html.
 
+## Estado al cierre 2026-08-10
+Usuario confirmó que las dos pantallas nuevas (Puntajes de interclubes y
+Circuitos) se ven y andan. `guardar_circuito` probado ejecutando el bloque real:
+guarda fechas, rechaza texto que no sea YYYY-MM-DD ("Fecha inválida") y vacía a
+NULL. **El circuito 1 quedó con fecha_inicio y fecha_fin en NULL a propósito**:
+sin fecha_fin el circuito está abierto y el ranking muestra LÍDER, que es lo
+correcto hasta que se juegue la última fecha. Cuando la organización cierre el
+circuito, cargar la fecha de fin en Admin → Circuitos y el hero pasa a CAMPEÓN
+DEL CIRCUITO (dorado).
+
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
   normalizado (`ric_clave`: mayúsculas, sin acentos, espacios colapsados). NO hay
