@@ -260,42 +260,43 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 #ric-container .ric-det-cat { font-size:12px !important; color:#374151 !important; font-weight:600 !important; text-align:left !important; }
 #ric-container .ric-nota { font-size:11px !important; color:#6b7280 !important; text-align:center !important; margin:14px 0 0 !important; line-height:1.5 !important; }
 #ric-container .ric-vacio { text-align:center !important; color:#6b7280 !important; padding:46px 20px !important; font-size:14px !important; }
-/* ── MÓVIL: la tabla de 9 columnas no entra en un teléfono. En vez de
-   achicarla (o scrollear de costado) cada club pasa a ser una tarjeta de dos
-   líneas: arriba puesto + club + total, abajo los 5 contadores con su etiqueta.
-   Misma información, sin desplazamiento horizontal. Solo CSS: el HTML es uno. ── */
+/* ── MÓVIL (≤600px): misma tabla, rejilla compacta y RAYAS verticales en cada
+   columna numérica, para que se lea dónde cae cada número sin desplazar de
+   costado. Cabecera, fila del club y fila de categoría comparten los mismos
+   anchos, así el puntaje del detalle cae bajo su posición. Solo CSS: el HTML
+   es el mismo que en escritorio, que no cambia. ── */
 @media (max-width:600px) {
   #ric-container .ric-hero-club { font-size:18px !important; }
   #ric-container .ric-bname { width:96px !important; font-size:10px !important; }
   #ric-container .ric-scroll { overflow-x:visible !important; }
-  #ric-container .ric-thead { display:none !important; }            /* las etiquetas van en cada celda */
-  #ric-container .ric-row, #ric-container .ric-det,
+  #ric-container .ric-thead, #ric-container .ric-row, #ric-container .ric-det,
   #ric-container .ric-det-ev, #ric-container .ric-det-row { min-width:0 !important; }
 
-  #ric-container .ric-row { flex-wrap:wrap !important; padding:8px 4px !important; row-gap:2px !important; }
-  #ric-container .ric-td { font-size:13px !important; padding:2px 4px !important; }
-  #ric-container .c-pos  { width:24px !important; order:1 !important; }
-  #ric-container .c-club { order:2 !important; flex:1 1 auto !important; min-width:0 !important; font-size:13px !important; }
-  #ric-container .c-tot  { order:3 !important; width:auto !important; font-size:16px !important; }
-  #ric-container .c-chev { order:4 !important; width:20px !important; }
-  #ric-container .ric-row .c-n {
-    order:5 !important; flex:1 1 0 !important; width:auto !important;
-    display:flex !important; align-items:baseline !important; justify-content:center !important; gap:3px !important;
-    background:#f1f5f9 !important; border-radius:6px !important; margin:2px 2px 0 !important;
-    padding:4px 2px !important; font-size:12px !important;
-  }
-  #ric-container .ric-row .c-n::before { content:attr(data-lbl); font-size:10px !important; font-weight:600 !important; color:#94a3b8 !important; }
-  #ric-container .ric-row .c-n.oro { background:#fef3c7 !important; }
+  /* Rejilla compartida por cabecera, filas y detalle */
+  #ric-container .c-pos  { width:24px !important; flex:0 0 24px !important; }
+  #ric-container .c-club { flex:1 1 auto !important; min-width:0 !important; }
+  #ric-container .c-n    { width:27px !important; flex:0 0 27px !important; }
+  #ric-container .c-tot  { width:44px !important; flex:0 0 44px !important; }
+  #ric-container .c-chev { display:none !important; }   /* la fila entera es el botón */
 
-  /* Detalle: sin cabecera arriba, alinear por columnas no aporta —
-     categoría a la izquierda y su puntaje a la derecha */
-  #ric-container .ric-dt { font-size:12px !important; padding:6px 4px !important; }
-  #ric-container .ric-dt.c-pos, #ric-container .ric-dt.c-tot,
-  #ric-container .ric-dt.c-chev, #ric-container .ric-dt.c-n:not(.val) { display:none !important; }
-  #ric-container .ric-dt.c-club { flex:1 1 auto !important; }
-  #ric-container .ric-dt.c-n.val { width:auto !important; margin-left:auto !important; font-size:13px !important; }
-  #ric-container .ric-det-row { padding:0 4px !important; }
-  #ric-container .ric-det-ev { font-size:10px !important; padding:9px 8px !important; }
+  /* Rayas de columna: de la cabecera hasta la última categoría del detalle */
+  #ric-container .c-n, #ric-container .c-tot { border-left:1px solid #e3e9f0 !important; }
+  #ric-container .ric-thead .c-n { border-left-color:#d3dce6 !important; }
+  #ric-container .c-tot { border-left-color:#cbd5e1 !important; }
+
+  #ric-container .ric-th { font-size:9px !important; padding:7px 1px !important; letter-spacing:0 !important; }
+  #ric-container .ric-th.c-pos { font-size:8px !important; }
+  #ric-container .ric-td { font-size:12px !important; padding:7px 1px !important; }
+  #ric-container .ric-td.c-club { font-size:11.5px !important; line-height:1.25 !important; }
+  #ric-container .ric-td.c-tot { font-size:12.5px !important; }
+
+  /* Detalle: mismas columnas, el puntaje bajo su posición */
+  #ric-container .ric-dt { font-size:11px !important; padding:5px 1px !important; }
+  #ric-container .ric-dt.c-club { padding-left:4px !important; }
+  #ric-container .ric-det-cat { font-size:11px !important; line-height:1.3 !important; }
+  #ric-container .ric-det-lbl { font-size:8.5px !important; }
+  #ric-container .ric-dt.c-n.val { font-size:11px !important; }
+  #ric-container .ric-det-ev { font-size:10px !important; padding:8px !important; }
 }
 </style>
 
@@ -386,12 +387,11 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
         <div class="ric-td c-club"><?php echo ric_txt($c['nombre']); ?>
           <?php if (!$evSel && count($eventosVer) > 1): ?><small><?php echo count($c['eventos']); ?> de <?php echo count($eventosVer); ?> eventos</small><?php endif; ?>
         </div>
-        <!-- data-lbl: en móvil no hay cabecera, cada número lleva su etiqueta -->
-        <div class="ric-td c-n" data-lbl="Part."><?php echo $c['conteo'][0]; ?></div>
-        <div class="ric-td c-n" data-lbl="4°"><?php echo $c['conteo'][4]; ?></div>
-        <div class="ric-td c-n" data-lbl="🥉"><?php echo $c['conteo'][3]; ?></div>
-        <div class="ric-td c-n" data-lbl="🥈"><?php echo $c['conteo'][2]; ?></div>
-        <div class="ric-td c-n oro" data-lbl="🥇"><?php echo $c['conteo'][1]; ?></div>
+        <div class="ric-td c-n"><?php echo $c['conteo'][0]; ?></div>
+        <div class="ric-td c-n"><?php echo $c['conteo'][4]; ?></div>
+        <div class="ric-td c-n"><?php echo $c['conteo'][3]; ?></div>
+        <div class="ric-td c-n"><?php echo $c['conteo'][2]; ?></div>
+        <div class="ric-td c-n oro"><?php echo $c['conteo'][1]; ?></div>
         <div class="ric-td c-tot"><?php echo $c['total']; ?></div>
         <div class="ric-td c-chev">&#8964;</div>
       </div>

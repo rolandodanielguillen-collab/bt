@@ -124,12 +124,18 @@ DEL CIRCUITO (dorado).
 - **Nada de numerar las fechas en el código**: el nombre de cada fecha sale de
   `_p_eventos.evento`, que la organización configura en el admin (el usuario ya
   renombró ev15 a "1°. FECHA"). Se eliminó el `$nroFecha` que anteponía "1ª fecha ·".
-- **Móvil (≤600px): la tabla de 9 columnas se convierte en tarjeta de 2 líneas**
-  (puesto + club + total arriba; los 5 contadores con su etiqueta abajo, en
-  chips). Sin scroll horizontal y sin perder información. Es SOLO CSS + un
-  `data-lbl` por celda que la etiqueta se imprime con `::before` (la cabecera se
-  oculta en móvil). En el detalle, en móvil, se ocultan las celdas vacías y queda
-  categoría a la izquierda / puntaje a la derecha.
+- **Móvil (≤600px)**: primero se probó tarjeta de 2 líneas con chips — el usuario
+  la rechazó ("no me gusta"). Se armaron 4 mockups en un artifact
+  (`scratchpad/mockups-ranking-movil.html`,
+  https://claude.ai/code/artifact/69492855-6347-4b1c-9c22-6663b5bdc049) y eligió
+  **B1: la MISMA tabla compacta, con cabecera visible, rayas verticales por
+  columna, y el detalle cayendo en su columna**. Anchos móviles: pos 24 · club
+  flexible · 5×27 · total 44 · chevron oculto. Solo CSS; el HTML y el escritorio
+  quedan igual.
+- LECCIÓN del mockup: las celdas del detalle no tomaban ancho porque los anchos
+  estaban en `.thead div.cX` y `.r > div.cX` — deben ir por CLASE sola para que
+  cabecera, fila y detalle compartan rejilla. En producción ya estaba por clase;
+  verificado que las 60 filas de categoría tienen las 9 celdas de la rejilla.
 
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
