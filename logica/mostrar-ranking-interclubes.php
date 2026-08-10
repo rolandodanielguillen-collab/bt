@@ -79,6 +79,7 @@ $eventosVer = $evSel ? [$evSel => $eventosIC[$evSel]] : $eventosIC;
 $ranking = [];      // clave de club => fila del ranking
 $catNombre = [];    // id_categoria => nombre
 $catsEnCurso = [];  // id_evento => cantidad de categorías sin final definida
+$escalaEv = [];     // id_evento => [posición => puntos] vigente en esa fecha
 
 if ($eventosVer) {
     $ids = implode(',', array_map('intval', array_keys($eventosVer)));
@@ -113,6 +114,12 @@ if ($eventosVer) {
         $catsEnCurso[$idEv] = 0;
         $catsEv = $sorteo[$idEv] ?? [];
         uksort($catsEv, fn($a, $b) => strcmp($catNombre[$a] ?? '', $catNombre[$b] ?? ''));
+        // Escala vigente en esta fecha (para el pie): la del admin si la cargaron,
+        // si no la de por defecto. Se toma de la 1ra categoría — el editor de
+        // interclubes guarda los mismos 5 valores en todas.
+        $catRef = array_key_first($catsEv);
+        if ($catRef !== null)
+            foreach ([1, 2, 3, 4, 0] as $p) $escalaEv[$idEv][$p] = ic_puntos_pos($matriz, $idEv, $catRef, $p);
         foreach ($catsEv as $idCat => $clubesCat) {
             $posiciones = ic_posiciones_categoria(
                 $clubesCat,
@@ -378,10 +385,20 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
     </div>
   </div>
 
+  <?php
+  // Cada fecha tiene su propia tabla de puntos (admin → Puntajes por evento). Si
+  // todas las mostradas coinciden se detalla; si difieren, se dice y punto.
+  $escalasDistintas = count(array_unique(array_map('json_encode', $escalaEv))) > 1;
+  $esc1 = $escalaEv ? reset($escalaEv) : IC_PUNTOS_POSICION;
+  ?>
   <div class="ric-nota">
-    Campeón <?php echo IC_PUNTOS_POSICION[1]; ?> · Finalista <?php echo IC_PUNTOS_POSICION[2]; ?> ·
-    Tercer puesto <?php echo IC_PUNTOS_POSICION[3]; ?> · Cuarto <?php echo IC_PUNTOS_POSICION[4]; ?> ·
-    Participación <?php echo IC_PUNTOS_POSICION[0]; ?>, en cada categoría.<br>
+    <?php if ($escalasDistintas): ?>
+    Cada fecha tiene su propia tabla de puntos por posición; el detalle de cada club muestra lo que sumó en cada una.<br>
+    <?php else: ?>
+    Campeón <?php echo $esc1[1]; ?> · Finalista <?php echo $esc1[2]; ?> ·
+    Tercer puesto <?php echo $esc1[3]; ?> · Cuarto <?php echo $esc1[4]; ?> ·
+    Participación <?php echo $esc1[0]; ?>, en cada categoría.<br>
+    <?php endif; ?>
     Desempate: más títulos, después finales, terceros y cuartos puestos.<br>
     Suman los torneos interclubes ya culminados del circuito.
   </div>

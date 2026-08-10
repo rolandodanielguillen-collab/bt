@@ -3988,6 +3988,7 @@ const ETIQ_ORDER=[1,9,2,3,4,6,8,11,12,13,14,15,16];
 const ETIQ_SHORT={1:'Grupo',9:'16avos',2:'8vos',3:'Cuartos',4:'Semi',6:'Vice',8:'Campeón',11:'Partic.',12:'Camp. Tabla',13:'Vice Tabla',14:'3ro Tabla',15:'4to Tabla',16:'5to Tabla'};
 let pjEtiquetas=[];
 let pjCategorias=[];
+let pjTipoEvento=0;
 
 async function loadPuntajes(){
   var sel=document.getElementById('pjEvento');
@@ -4019,10 +4020,14 @@ async function loadPuntajesEvento(){
     var r=await fetch(API+'?action=puntajes_evento&id_evento='+idEv).then(function(r){return r.json();});
     pjEtiquetas=r.etiquetas||[];
     pjCategorias=r.categorias||[];
+    pjTipoEvento=parseInt(r.tipo_evento)||0;
     renderPuntajes();
-    document.getElementById('btnCopiarPj').style.display='';
-    document.getElementById('btnGuardarPj').style.display='';
-    document.getElementById('pjEventoOrigen').style.display='';
+    // Interclubes: puntúa por posición del club, no por ronda → editor propio,
+    // sin la matriz de etiquetas ni el copiar/guardar de esa matriz.
+    var esIC = pjTipoEvento===5;
+    document.getElementById('btnCopiarPj').style.display=esIC?'none':'';
+    document.getElementById('btnGuardarPj').style.display=esIC?'none':'';
+    document.getElementById('pjEventoOrigen').style.display=esIC?'none':'';
   }catch(ex){
     ct.innerHTML='<div style="color:var(--danger);text-align:center;padding:40px;">Error cargando puntajes</div>';
     console.error('loadPuntajesEvento error',ex);
@@ -4035,6 +4040,7 @@ function renderPuntajes(){
     ct.innerHTML='<div style="color:var(--text-muted);text-align:center;padding:40px;">Este evento no tiene categorías asignadas</div>';
     return;
   }
+  if(pjTipoEvento===5){ renderPuntajesIC(ct); return; }
   var html='<style>'
     +'.pj-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-card);overflow:auto;max-width:100%;max-height:calc(100vh - 260px);}'
     +'.pj-mx{border-collapse:separate;border-spacing:0;width:100%;min-width:940px;font-size:12px;}'
@@ -4070,6 +4076,52 @@ function renderPuntajes(){
   html+='</tbody></table></div>';
   html+='<div style="margin-top:10px;font-size:11px;color:var(--text-muted);"><i class="fas fa-info-circle" style="margin-right:6px;"></i>Celda vacía = esa ronda no otorga puntos en la categoría. Escribe un valor para habilitarla y pulsa "Guardar todo".</div>';
   ct.innerHTML=html;
+}
+
+// ═══ PUNTAJES DE UNA FECHA DE INTERCLUBES ═══
+// El club puntúa por su posición final en cada categoría, así que la fecha
+// tiene UNA tabla de 5 valores (no la matriz de rondas del ranking de jugadores).
+const IC_POS=[{k:'campeon',etiq:8,lbl:'Campeón',def:100},{k:'finalista',etiq:6,lbl:'Finalista',def:75},
+              {k:'tercero',etiq:10,lbl:'Tercer puesto',def:60},{k:'cuarto',etiq:4,lbl:'Cuarto puesto',def:50},
+              {k:'participacion',etiq:1,lbl:'Participación',def:30}];
+
+function renderPuntajesIC(ct){
+  // Los 5 valores son iguales en todas las categorías: alcanza con leer la primera
+  var pjMap={};
+  (pjCategorias[0].puntajes||[]).forEach(function(p){pjMap[p.id_etiqueta]=p.puntos;});
+  var cargado=IC_POS.some(function(p){return pjMap[p.etiq]!==undefined;});
+  var html='<div class="ch-card" style="max-width:620px;">'
+    +'<div class="ch-title">Puntos de esta fecha</div>'
+    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">'
+    +'Cada club suma según su posición final en CADA categoría. Estos valores valen para las '
+    +pjCategorias.length+' categorías de esta fecha; otra fecha puede tener otros.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+  IC_POS.forEach(function(p){
+    var v=(pjMap[p.etiq]!==undefined)?pjMap[p.etiq]:p.def;
+    html+='<div><label class="fl" style="font-size:11px;">'+p.lbl+'</label>'
+        +'<input class="fi" type="number" min="0" step="5" style="width:100px;" id="pjIC_'+p.k+'" value="'+v+'"></div>';
+  });
+  html+='</div>'
+    +'<div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+    +'<button class="btn btn-p btn-sm" onclick="guardarPuntajesIC()"><i class="fas fa-save"></i> Guardar puntos de la fecha</button>'
+    +'<span style="font-size:11px;color:var(--text-muted);">'
+    +(cargado?'Valores cargados para esta fecha.':'Todavía sin cargar: el ranking usa estos valores por defecto.')
+    +'</span></div></div>';
+  ct.innerHTML=html;
+}
+
+async function guardarPuntajesIC(){
+  var idEv=document.getElementById('pjEvento').value;
+  if(!idEv){alert('Selecciona un evento');return;}
+  var datos={action:'guardar_puntajes_ic', id_evento:idEv};
+  for(var i=0;i<IC_POS.length;i++){
+    var v=document.getElementById('pjIC_'+IC_POS[i].k).value;
+    if(v===''||isNaN(v)||Number(v)<0){alert('Revisá el valor de '+IC_POS[i].lbl);return;}
+    datos[IC_POS[i].k]=v;
+  }
+  var r=await api(datos);
+  if(r.success){ alert(r.mensaje||'Guardado'); loadPuntajesEvento(); }
+  else alert('Error: '+(r.error||'desconocido'));
 }
 
 async function guardarTodosPuntajes(){

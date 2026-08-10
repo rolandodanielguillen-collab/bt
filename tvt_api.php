@@ -1576,6 +1576,11 @@ if ($action === 'puntajes_evento') {
     $idEvento = abs((int)strGet('id_evento'));
     if (!$idEvento) respErr('Falta id_evento');
 
+    // Los interclubes puntúan por POSICIÓN del club (no por ronda del jugador):
+    // el front muestra el editor chico de 5 valores en vez de la matriz de etiquetas.
+    $tipoEvento = (int)($mysqli2->query("SELECT id_tipo_evento FROM _p_eventos WHERE id={$idEvento}")
+        ->fetch_assoc()['id_tipo_evento'] ?? 0);
+
     $cats = [];
     $rc = $mysqli2->query("SELECT rec.id_categoria, c.categoria
         FROM _relacion_evento_categoria rec
@@ -1606,7 +1611,42 @@ if ($action === 'puntajes_evento') {
         $etiqs[] = ['id' => (int)$r['id'], 'etiqueta' => $r['etiqueta']];
     }
 
-    resp(['categorias' => array_values($cats), 'etiquetas' => $etiqs]);
+    resp(['categorias' => array_values($cats), 'etiquetas' => $etiqs, 'tipo_evento' => $tipoEvento]);
+}
+
+// ACTION: guardar_puntajes_ic — Puntos de UNA fecha de interclubes.
+// Escribe los 5 valores (campeón/finalista/3°/4°/participación) en TODAS las
+// categorías del evento: en interclubes la fecha tiene una sola tabla de puntos.
+// Si no se carga nada, el ranking usa IC_PUNTOS_POSICION por defecto.
+if ($action === 'guardar_puntajes_ic') {
+    require_once __DIR__ . '/interclubes.functions.php';
+    $idEvento = abs((int)strGet('id_evento'));
+    if (!$idEvento) respErr('Falta id_evento');
+
+    $valores = [];
+    foreach (['campeon' => 1, 'finalista' => 2, 'tercero' => 3, 'cuarto' => 4, 'participacion' => 0] as $campo => $pos) {
+        $v = strGet($campo);
+        if ($v === '' || !is_numeric($v) || (int)$v < 0) respErr("Puntos inválidos en {$campo}");
+        $valores[$pos] = (int)$v;
+    }
+
+    $cats = [];
+    $rc = $mysqli2->query("SELECT id_categoria FROM _relacion_evento_categoria WHERE id_evento={$idEvento}");
+    while ($r = $rc->fetch_assoc()) $cats[] = (int)$r['id_categoria'];
+    if (!$cats) respErr('El evento no tiene categorías asignadas');
+
+    $etiqs = implode(',', array_map('intval', IC_ETIQUETA_POSICION));
+    $mysqli2->query("DELETE FROM _relacion_etiquetas_eventos
+                      WHERE id_evento={$idEvento} AND id_etiqueta IN ({$etiqs})");
+    $st = $mysqli2->prepare("INSERT INTO _relacion_etiquetas_eventos (id_etiqueta, id_evento, puntos, id_categoria) VALUES (?,?,?,?)");
+    foreach ($cats as $idCat) {
+        foreach ($valores as $pos => $pts) {
+            $etq = IC_ETIQUETA_POSICION[$pos];
+            $st->bind_param('iiii', $etq, $idEvento, $pts, $idCat);
+            $st->execute();
+        }
+    }
+    resp(['success' => true, 'mensaje' => 'Puntos de la fecha guardados (' . count($cats) . ' categorías)']);
 }
 
 if ($action === 'guardar_puntajes_categoria') {

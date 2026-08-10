@@ -84,6 +84,28 @@ fechas debe ser ranking de CIRCUITO con súper campeón al final, y que el badge
   usa `alert()` y `api({action,...})` por GET); la clase de tarjeta es `ch-card`,
   no `card`. Y `bt_log()` ya se llama una sola vez global al inicio de tvt_api.
 
+## 4ta tanda 2026-08-10 — puntajes POR FECHA (como el ranking de jugadores)
+Pedido: "los puntajes tienen que ser por fecha de interclubes así como el ranking
+de los jugadores". La matriz por evento ya mandaba sobre la constante, pero había
+que cargarla en la grilla de 16 etiquetas × 10 categorías. Ahora:
+- **Admin → Puntajes**, al elegir un evento `id_tipo_evento=5`, muestra un editor
+  chico de 5 valores (Campeón/Finalista/3°/4°/Participación) en vez de la matriz;
+  se ocultan Copiar y "Guardar todo" (son de la matriz de rondas).
+- `guardar_puntajes_ic` escribe esos 5 valores en TODAS las categorías del evento
+  (etiquetas 8/6/10/4/1). `puntajes_evento` ahora devuelve `tipo_evento`.
+- **La fecha 1 (ev15) quedó con su tabla cargada**: 50 filas (10 cats × 5), mismos
+  100/75/60/50/30 → el ranking dio idéntico (815/800/515/500/460/360).
+- El pie del ranking muestra la escala de la(s) fecha(s) mostradas; si dos fechas
+  tienen escalas distintas dice "cada fecha tiene su propia tabla".
+- **Probado que la config manda**: puse campeón=200 en ev15 y la página pasó a
+  1315/1300 (+5 títulos × 100) con el pie en "Campeón 200"; restaurado a 100 volvió
+  a 815/800.
+- El endpoint de guardado se ejecutó de verdad extrayendo el bloque real de
+  tvt_api.php y corriéndolo contra el evento demo (escribió 90/70/55/45/25 con las
+  etiquetas correctas); filas de prueba borradas después, ev15 intacto (50 filas).
+- GOTCHA: hay un `/tmp/interclubes.functions.php` viejo (07-ago) en el VPS; un
+  harness en /tmp con `__DIR__` lo levanta en vez del de public_html.
+
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
   normalizado (`ric_clave`: mayúsculas, sin acentos, espacios colapsados). NO hay
