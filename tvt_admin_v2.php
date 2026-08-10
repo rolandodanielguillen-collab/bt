@@ -347,6 +347,7 @@ tr:hover td{background:var(--bg-hover)}
     <div class="nav-i" onclick="goPage('admins')"><i class="fas fa-user-shield"></i> Administradores</div>
     <div class="nav-i" onclick="goPage('puntajes')"><i class="fas fa-star"></i> Puntajes</div>
     <?php if ($adminTipo === 'superadmin'): ?>
+    <div class="nav-i" onclick="goPage('circuitos')"><i class="fas fa-flag-checkered"></i> Circuitos</div>
     <div class="nav-i" onclick="goPage('log')"><i class="fas fa-list-check"></i> Log</div>
     <?php endif; ?>
   </div>
@@ -690,6 +691,14 @@ tr:hover td{background:var(--bg-hover)}
     </div>
 
     <?php if ($adminTipo === 'superadmin'): ?>
+    <!-- ═══ 11. CIRCUITOS (cierre del circuito → campeón en el ranking) ═══ -->
+    <div class="page" id="pg-circuitos">
+      <div class="pg-row">
+        <div><div class="pg-title">Circuitos</div><div class="pg-sub">La fecha de fin cierra el circuito: hasta ese día el ranking de interclubes muestra al <strong>líder</strong>; después corona al <strong>campeón del circuito</strong></div></div>
+      </div>
+      <div id="ciContainer"></div>
+    </div>
+
     <div class="page" id="pg-log">
       <div class="pg-row">
         <div><div class="pg-title">Log de acciones</div><div class="pg-sub">Todo lo que se creó, editó o borró desde el admin, el cargador de resultados, el sorteo y los formularios de los clubes</div></div>
@@ -1222,7 +1231,7 @@ function goPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('pg-'+id).classList.add('active');
   document.querySelectorAll('.nav-i').forEach(n=>n.classList.remove('active'));
-  const titles={dashboard:'Dashboard',eventos:'Eventos',inscripciones:'Inscripciones',categorias:'Categorías',jugadores:'Jugadores',resultados:'Resultados',horarios:'Horarios',ranking:'Ranking',admins:'Administradores',puntajes:'Puntajes',log:'Log de acciones'};
+  const titles={dashboard:'Dashboard',eventos:'Eventos',inscripciones:'Inscripciones',categorias:'Categorías',jugadores:'Jugadores',resultados:'Resultados',horarios:'Horarios',ranking:'Ranking',admins:'Administradores',puntajes:'Puntajes',circuitos:'Circuitos',log:'Log de acciones'};
   document.getElementById('topTitle').textContent=titles[id]||id;
   event&&event.target&&document.querySelectorAll('.nav-i').forEach(n=>{if(n.textContent.trim().toLowerCase().includes(id.substring(0,5)))n.classList.add('active')});
   if(window.innerWidth<1024){document.getElementById('sb').classList.remove('open');document.getElementById('sbOv').classList.remove('show')}
@@ -1230,7 +1239,50 @@ function goPage(id){
   if(id==='admins') loadAdmins();
   if(id==='puntajes') loadPuntajes();
   if(id==='jugadores') loadJugadores(1);
+  if(id==='circuitos') loadCircuitos();
   if(id==='log') loadLog(1);
+}
+
+// ═══ CIRCUITOS (solo superadmin) ═══
+function ciEsc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+
+async function loadCircuitos(){
+  const ct=document.getElementById('ciContainer');
+  ct.innerHTML='<div class="empty">Cargando…</div>';
+  try{
+    const r=await api({action:'circuitos'});
+    if(!r.success||!r.circuitos||!r.circuitos.length){
+      ct.innerHTML='<div class="empty"><i class="fas fa-flag-checkered"></i><p>'+ciEsc((r&&r.error)||'Sin circuitos')+'</p></div>';
+      return;
+    }
+    ct.innerHTML=r.circuitos.map(function(c){
+      var cerrado=c.fecha_fin && c.fecha_fin<=new Date().toISOString().slice(0,10);
+      return '<div class="ch-card" style="margin-bottom:12px;">'+
+        '<div style="font-weight:700;margin-bottom:4px;">'+ciEsc(c.nombre)+'</div>'+
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">'+
+          c.interclubes_culminados+' interclubes culminado'+(c.interclubes_culminados==1?'':'s')+' · '+
+          (cerrado?'<b>circuito cerrado — el ranking corona al campeón</b>':'circuito en curso — el ranking muestra al líder')+
+        '</div>'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'+
+          '<div><label class="fl" style="font-size:11px;">Inicio</label>'+
+            '<input class="fi" type="date" id="ciIni'+c.id+'" value="'+(c.fecha_inicio||'')+'"></div>'+
+          '<div><label class="fl" style="font-size:11px;">Fin del circuito</label>'+
+            '<input class="fi" type="date" id="ciFin'+c.id+'" value="'+(c.fecha_fin||'')+'"></div>'+
+          '<button class="btn btn-p btn-sm" onclick="guardarCircuito('+c.id+')"><i class="fas fa-save"></i> Guardar</button>'+
+        '</div></div>';
+    }).join('');
+  }catch(ex){
+    ct.innerHTML='<div class="empty"><p>Error cargando circuitos</p></div>';
+    console.error('loadCircuitos error',ex);
+  }
+}
+
+async function guardarCircuito(id){
+  const r=await api({action:'guardar_circuito', id:id,
+    fecha_inicio: document.getElementById('ciIni'+id).value,
+    fecha_fin:    document.getElementById('ciFin'+id).value});
+  if(r.success) loadCircuitos();
+  else alert('Error: '+(r.error||'desconocido'));
 }
 
 // ═══ LOG DE ACCIONES (solo superadmin) ═══

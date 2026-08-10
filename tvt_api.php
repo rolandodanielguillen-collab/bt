@@ -1538,6 +1538,39 @@ if ($action === 'desasignar_evento') {
     resp(['success' => true]);
 }
 
+// ── CIRCUITOS (SOLO superadmin) ──
+// La fecha de fin es lo que corona al campeón del circuito en el ranking de
+// clubes: mientras no llegue, el ranking muestra al LÍDER; una vez pasada,
+// al CAMPEÓN DEL CIRCUITO. Vacía = circuito todavía en curso.
+if ($action === 'circuitos') {
+    if (($_SESSION['admin_tipo'] ?? '') !== 'superadmin') respErr('Solo el superadmin puede ver los circuitos');
+    $res = $mysqli2->query("SELECT id, nombre, fecha_inicio, fecha_fin, estado FROM _circuitos ORDER BY id");
+    $circuitos = [];
+    while ($r = $res->fetch_assoc()) {
+        $r['interclubes_culminados'] = (int)$mysqli2->query(
+            "SELECT COUNT(*) c FROM _p_eventos WHERE id_circuito={$r['id']} AND id_tipo_evento=5 AND estado='culminado'"
+        )->fetch_assoc()['c'];
+        $circuitos[] = $r;
+    }
+    resp(['success' => true, 'circuitos' => $circuitos]);
+}
+
+if ($action === 'guardar_circuito') {
+    if (($_SESSION['admin_tipo'] ?? '') !== 'superadmin') respErr('Solo el superadmin puede editar circuitos');
+    $id = intGet('id');
+    if (!$id) respErr('Falta el circuito');
+    $ini = strGet('fecha_inicio');
+    $fin = strGet('fecha_fin');
+    foreach ([$ini, $fin] as $f) {
+        if ($f !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $f)) respErr('Fecha inválida');
+    }
+    $st = $mysqli2->prepare("UPDATE _circuitos SET fecha_inicio=NULLIF(?,''), fecha_fin=NULLIF(?,'') WHERE id=? LIMIT 1");
+    $st->bind_param('ssi', $ini, $fin, $id);
+    if (!$st->execute()) respErr('Error al guardar el circuito');
+    // el log de acciones ya lo registra el bt_log() global del arranque del archivo
+    resp(['success' => true, 'mensaje' => 'Circuito guardado']);
+}
+
 // ── PUNTAJES CRUD ──
 if ($action === 'puntajes_evento') {
     $idEvento = abs((int)strGet('id_evento'));

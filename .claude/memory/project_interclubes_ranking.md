@@ -59,6 +59,31 @@ por 15 pts, definido por los terceros puestos.
   815/800/515/500/460/360, `?ev=16` solo el demo.
 - Backups de la 2da tanda: `.bak2-20260810`.
 
+## 3ra tanda 2026-08-10 — semántica de circuito (líder vs campeón)
+El usuario pasó ev15 a `culminado` (el ranking ya se ve). Planteó que con varias
+fechas debe ser ranking de CIRCUITO con súper campeón al final, y que el badge
+"CAMPEÓN GENERAL" desde la 1ra fecha estaba mal. Quedó así:
+- **Circuito abierto** → hero AZUL "Líder del Circuito · N pts · tras N fechas
+  [, falta M]" + aviso "el campeón se define al cierre".
+- **Circuito cerrado** → hero DORADO "🏆 Campeón del Circuito".
+- **Fecha elegida** en el selector → "Nª fecha · Campeón".
+- Cierre = `_circuitos.fecha_fin` cargada y ya pasada. Refuerzo: si hay fechas
+  interclubes del circuito en `activo`/`registro`, el circuito NO se considera
+  cerrado aunque la fecha esté puesta.
+- Selector: `CIRCUITO · 1ª FECHA · 2ª FECHA…` numeradas por fecha real.
+- **Todas las fechas suman** (sin descartes), igual que el ranking de jugadores.
+- **Admin → Circuitos** (nuevo, solo superadmin): nombre, inicio, fin del
+  circuito + cuántos interclubes culminados tiene y si está abierto o cerrado.
+  API: `circuitos` y `guardar_circuito` en tvt_api.php. NO existía pantalla de
+  circuitos: el circuito era un `<option>` fijo en el form de eventos.
+- Verificado en vivo los DOS estados: con `fecha_fin='2026-08-09'` el hero pasó a
+  "🏆 Campeón del Circuito" sin aviso; restaurado a NULL volvió a "Líder del
+  Circuito". Nadie más en el sitio lee `_circuitos.fecha_fin` (verificado por grep).
+- Backups de esta tanda: `.bak3-20260810` (tvt_admin_v2, tvt_api).
+- GOTCHA del admin: NO existen helpers `toast()` ni `esc()` en tvt_admin_v2 (se
+  usa `alert()` y `api({action,...})` por GET); la clase de tarjeta es `ch-card`,
+  no `card`. Y `bt_log()` ya se llama una sola vez global al inicio de tvt_api.
+
 ## Decisiones y techos
 - **Clubes entre eventos**: `_p_clubes` tiene `id_evento` → se agrupa por nombre
   normalizado (`ric_clave`: mayúsculas, sin acentos, espacios colapsados). NO hay

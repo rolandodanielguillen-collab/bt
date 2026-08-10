@@ -21,13 +21,19 @@ if (isset($pagina)) {
 }
 
 // ── Circuito de la URL amigable ──────────────────────────────────────────────
+// `fecha_fin` es lo que CIERRA el circuito (se carga en el admin → Circuitos):
+// hasta ese día hay líder; pasada, hay campeón del circuito.
 $idcircuito = 0;
+$circuitoCerrado = false;
 if (isset($_GET['url'])) {
-    $st = $mysqli2->prepare("SELECT id FROM _circuitos WHERE url_amigable=?");
+    $st = $mysqli2->prepare("SELECT id, fecha_fin FROM _circuitos WHERE url_amigable=?");
     $st->bind_param('s', $_GET['url']);
     $st->execute();
-    $idcircuito = (int)($st->get_result()->fetch_assoc()['id'] ?? 0);
+    $rowC = $st->get_result()->fetch_assoc();
     $st->close();
+    $idcircuito = (int)($rowC['id'] ?? 0);
+    $finC = $rowC['fecha_fin'] ?? null;
+    $circuitoCerrado = $finC && $finC !== '0000-00-00' && date('Y-m-d') >= $finC;
 }
 
 // Nombre visible: los nombres viejos de la base vienen en latin1 en algunas filas
@@ -50,6 +56,20 @@ if ($idcircuito) {
     while ($r = $res->fetch_assoc()) $eventosIC[(int)$r['id']] = $r['evento'];
     $st->close();
 }
+// Fechas del circuito ya creadas pero todavía sin cerrar: mientras haya una,
+// el circuito claramente sigue abierto aunque nadie haya cargado fecha_fin.
+$fechasPendientes = 0;
+if ($idcircuito) {
+    $fechasPendientes = (int)($mysqli2->query("SELECT COUNT(*) c FROM _p_eventos
+        WHERE id_circuito={$idcircuito} AND id_tipo_evento=5
+          AND estado IN ('activo','registro')")->fetch_assoc()['c'] ?? 0);
+}
+if ($fechasPendientes > 0) $circuitoCerrado = false;
+
+// Número de fecha dentro del circuito (los eventos ya vienen ordenados por fecha)
+$nroFecha = [];
+$n = 0;
+foreach (array_keys($eventosIC) as $idEv) $nroFecha[$idEv] = ++$n;
 
 // Selector de evento: TODOS (acumulado) o uno solo
 $evSel = isset($_GET['ev']) ? abs((int)$_GET['ev']) : 0;
@@ -177,6 +197,13 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 #ric-container .ric-hero-lbl { font-size:10px !important; font-weight:800 !important; letter-spacing:.14em !important; color:#5c470a !important; text-transform:uppercase !important; }
 #ric-container .ric-hero-club { font-size:22px !important; font-weight:900 !important; color:#3d2f05 !important; margin:4px 0 2px !important; line-height:1.2 !important; }
 #ric-container .ric-hero-sub { font-size:12px !important; font-weight:700 !important; color:#6b5410 !important; }
+/* Líder (circuito en curso): azul, no la chapa dorada del campeón */
+#ric-container .ric-hero.lider { background:linear-gradient(135deg,#1e3a5f 0%,#0f2744 100%) !important; box-shadow:0 4px 18px rgba(15,39,68,.3) !important; }
+#ric-container .ric-hero.lider .ric-hero-lbl { color:#93b4d8 !important; }
+#ric-container .ric-hero.lider .ric-hero-club { color:#fff !important; }
+#ric-container .ric-hero.lider .ric-hero-sub { color:#c7d7e8 !important; }
+#ric-container .ric-hero.lider .ric-hero-evs { color:#c7d7e8 !important; border-top-color:rgba(255,255,255,.2) !important; }
+#ric-container .ric-aviso { font-size:11px !important; color:#6b7280 !important; text-align:center !important; margin:-8px 0 18px !important; }
 #ric-container .ric-hero-evs { font-size:11px !important; font-weight:600 !important; color:#6b5410 !important; margin-top:8px !important; padding-top:8px !important; border-top:1px solid rgba(93,71,10,.25) !important; line-height:1.6 !important; }
 /* Selector de evento */
 #ric-container .ric-evs { display:flex !important; flex-wrap:wrap !important; gap:6px !important; justify-content:center !important; margin-bottom:16px !important; }
@@ -248,29 +275,43 @@ $qsIC   = htmlspecialchars($qsBase) . '&amp;ic';
 
   <?php if (count($eventosIC) > 1): ?>
   <div class="ric-evs">
-    <a class="ric-ev <?php echo $evSel ? '' : 'on'; ?>" href="?<?php echo $qsIC; ?>">GENERAL</a>
+    <a class="ric-ev <?php echo $evSel ? '' : 'on'; ?>" href="?<?php echo $qsIC; ?>">CIRCUITO</a>
     <?php foreach ($eventosIC as $idEv => $nomEv): ?>
-    <a class="ric-ev <?php echo $evSel === $idEv ? 'on' : ''; ?>" href="?<?php echo $qsIC; ?>&amp;ev=<?php echo $idEv; ?>"><?php echo ric_txt($nomEv); ?></a>
+    <a class="ric-ev <?php echo $evSel === $idEv ? 'on' : ''; ?>" href="?<?php echo $qsIC; ?>&amp;ev=<?php echo $idEv; ?>"><?php echo $nroFecha[$idEv]; ?>ª FECHA</a>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
 
-  <div class="ric-hero">
-    <div class="ric-hero-lbl">🏆 <?php echo $evSel ? 'Campeón del evento' : 'Campeón General'; ?></div>
+  <?php
+  // Con una fecha elegida: campeón de esa fecha. En el acumulado: campeón del
+  // circuito solo si el circuito ya cerró; mientras corre hay LÍDER, no campeón.
+  $esCampeon = $evSel || $circuitoCerrado;
+  $heroLbl = $evSel ? ($nroFecha[$evSel] . 'ª fecha · Campeón')
+                    : ($circuitoCerrado ? '🏆 Campeón del Circuito' : 'Líder del Circuito');
+  ?>
+  <div class="ric-hero <?php echo $esCampeon ? '' : 'lider'; ?>">
+    <div class="ric-hero-lbl"><?php echo $heroLbl; ?></div>
     <div class="ric-hero-club"><?php echo implode(' + ', array_map(fn($c) => ric_txt($c['nombre']), $campeones)); ?></div>
     <div class="ric-hero-sub">
       <?php echo $campeones[0]['total']; ?> pts ·
       <?php echo $campeones[0]['conteo'][1]; ?> título<?php echo $campeones[0]['conteo'][1] == 1 ? '' : 's'; ?>
+      <?php if (!$evSel): ?>
+        · tras <?php echo count($eventosVer); ?> fecha<?php echo count($eventosVer) == 1 ? '' : 's'; ?>
+        <?php if ($fechasPendientes > 0): ?>, falta<?php echo $fechasPendientes == 1 ? '' : 'n'; ?> <?php echo $fechasPendientes; ?><?php endif; ?>
+      <?php endif; ?>
       <?php echo count($campeones) > 1 ? ' · empate en la cima' : ''; ?>
     </div>
     <?php if (!$evSel && count($eventosVer) > 1): ?>
     <div class="ric-hero-evs">
       <?php foreach ($eventosVer as $idEv => $nomEv): if (!isset($campeonEvento[$idEv])) continue; ?>
-        <div><?php echo ric_txt($nomEv); ?>: <strong><?php echo implode(' + ', array_map('ric_txt', $campeonEvento[$idEv])); ?></strong></div>
+        <div><?php echo $nroFecha[$idEv]; ?>ª fecha · <?php echo ric_txt($nomEv); ?>: <strong><?php echo implode(' + ', array_map('ric_txt', $campeonEvento[$idEv])); ?></strong></div>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
   </div>
+  <?php if (!$evSel && !$circuitoCerrado): ?>
+  <div class="ric-aviso">El circuito sigue en juego: cada fecha suma al total. El campeón se define al cierre.</div>
+  <?php endif; ?>
 
   <div class="ric-top">
     <div class="ric-top-title">Puntos por club</div>
