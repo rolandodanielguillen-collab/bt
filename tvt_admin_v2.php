@@ -550,6 +550,19 @@ tr:hover td{background:var(--bg-hover)}
     <div class="page" id="pg-ranking">
       <div class="pg-row">
         <div><div class="pg-title">Ranking de Jugadores</div><div class="pg-sub">Cálculo automático por evento culminado</div></div>
+        <div>
+          <?php
+          // Un botón por circuito: si mañana hay más de uno no exporta el equivocado en silencio
+          $rkCircuitos = $mysqli2->query("SELECT nombre, url_amigable FROM _circuitos ORDER BY id");
+          while ($rkC = $rkCircuitos->fetch_assoc()):
+          ?>
+          <a class="btn btn-gh btn-sm" style="text-decoration:none;"
+             href="ranking_export.php?url=<?=urlencode($rkC['url_amigable'])?>"
+             title="Planilla por categorías de <?=htmlspecialchars($rkC['nombre'])?>">
+            <i class="fas fa-file-excel"></i> Descargar Excel
+          </a>
+          <?php endwhile; ?>
+        </div>
       </div>
 
       <!-- TABS -->

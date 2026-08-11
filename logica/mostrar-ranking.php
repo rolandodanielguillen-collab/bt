@@ -687,11 +687,6 @@ $top10Max = !empty($top10Global) ? $top10Global[0]['total'] : 1;
     </form>
   <?php endif; ?>
 
-  <div style="text-align:right; margin:-6px 0 14px;">
-    <a class="rk-btn" style="display:inline-block; text-decoration:none; background:#166534 !important; font-size:12px !important; padding:8px 14px !important;"
-       href="ranking_export.php?url=<?php echo urlencode($_GET['url'] ?? ''); ?>">&#11015; Descargar Excel</a>
-  </div>
-
   <!-- ═══ TOP 10 GLOBAL ═══ -->
   <?php if(!empty($top10Global) && $buscado === ''): ?>
   <div class="rk-top10">
