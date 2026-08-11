@@ -24,7 +24,7 @@ if(isset($_GET['url'])):
 	$h1="Ranking";
 endif;
 ?>
-<?php include "nocode-mostrar-ranking.php"; ?>
+<?php if(!isset($csvExport)) include "nocode-mostrar-ranking.php"; ?>
 
 <?php
 $buscado='';
@@ -108,6 +108,40 @@ function rk_puntos($evento,$categoria,$ci){
 	return isset($rankIdx[$evento][$categoria][$ci]) ? $rankIdx[$evento][$categoria][$ci] : 0;
 }
 
+// Jugadores de una categoría con su total real evento-por-evento, ordenados desc.
+// Fuente única: la usan el render (FASE 1) y el export CSV.
+function rk_jugadores_cat($acategoria,$padreCat){
+	global $puntosAll;
+	$jugadores=array();
+	$yaVisto=array();
+	foreach($puntosAll as $cadaPunto){
+		if(!isset($cadaPunto[$acategoria])) continue;
+		foreach($cadaPunto[$acategoria] as $cadaParticipante){
+			$ci=$cadaParticipante[0];
+			if(isset($yaVisto[$ci])) continue;
+			$yaVisto[$ci]=true;
+
+			$ptosMixto=0;
+			$ptosHijo=0;
+			foreach(rk_eventos($ci,$acategoria,$padreCat) as $evId){
+				// FIX 02/06/2026: puntos puros, sin restar padre
+				$ptosMixto += rk_puntos($evId,$padreCat,$ci);
+				$ptosHijo  += rk_puntos($evId,$acategoria,$ci);
+			}
+
+			$jugadores[]=array(
+				'ci'        => $ci,
+				'idRanking' => $cadaParticipante[2],
+				'ptosMixto' => $ptosMixto,
+				'ptosHijo'  => $ptosHijo,
+				'total'     => $ptosMixto + $ptosHijo,
+			);
+		}
+	}
+	usort($jugadores, fn($a,$b) => $b['total'] <=> $a['total']);
+	return $jugadores;
+}
+
 if(isset($_GET['debug'])): echo __LINE__." precarga: ".count($rankRows)." ranking / ".count($inscIdx)." cis / ".count($usuariosIdx)." usuarios"; echo "<pre>"; print_r($CatDisponibles); echo "</pre>"; endif;
 
 $mostrado=array();
@@ -131,6 +165,40 @@ foreach($rankRows as $row){
 }
 krsort($puntosAll);
 if(isset($_GET['debug'])): echo "-".__LINE__; echo "<pre>"; print_r($puntosAll); print_r($puntosxJugador); print_r($cantidadPxCat); echo "</pre>"; endif;
+
+// ═══ EXPORT CSV (lo setea ranking_export.php): mismos datos que el render, sin HTML ═══
+if(isset($csvExport)):
+	while(ob_get_level()) ob_end_clean();
+	$slug=preg_replace('/[^A-Za-z0-9]+/','_', $rowU['nombre'] ?? 'ranking');
+	header('Content-Type: text/csv; charset=UTF-8');
+	header('Content-Disposition: attachment; filename="ranking_'.trim($slug,'_').'_'.date('Ymd').'.csv"');
+
+	$out=fopen('php://output','w');
+	fwrite($out,"\xEF\xBB\xBF"); // BOM para que Excel lea los acentos
+	// ponytail: separador ';' porque el Excel en es-PY no parte por coma
+	fputcsv($out,array('Categoria','Pos','CI','Nombre','Apellido','Categoria Padre','Pts Padre','Pts Categoria','Total Pts'),';');
+
+	foreach($ACategorias as $acategoria):
+		if(!isset($CatDisponibles[$acategoria]) || $CatDisponibles[$acategoria][1] <= 0) continue;
+		$padreCat    = $CatDisponibles[$acategoria][1];
+		$nombrePadre = strtoupper($CatDisponibles[$padreCat][2]);
+		$catNombre   = categoria_id($acategoria);
+
+		$pos=0;
+		foreach(rk_jugadores_cat($acategoria,$padreCat) as $jug):
+			$pos++;
+			$u=isset($usuariosIdx[$jug['ci']]) ? $usuariosIdx[$jug['ci']] : array('nombre'=>'','apellido'=>'');
+			fputcsv($out,array(
+				$catNombre, $pos, $jug['ci'],
+				strtoupper(trim($u['nombre'])), strtoupper(trim($u['apellido'])),
+				$nombrePadre, $jug['ptosMixto'], $jug['ptosHijo'], $jug['total'],
+			),';');
+		endforeach;
+	endforeach;
+
+	fclose($out);
+	exit;
+endif;
 
 // ═══ TOP 10 GLOBAL: calcular usando la misma lógica evento-por-evento ═══
 $top10Global = [];
@@ -619,6 +687,11 @@ $top10Max = !empty($top10Global) ? $top10Global[0]['total'] : 1;
     </form>
   <?php endif; ?>
 
+  <div style="text-align:right; margin:-6px 0 14px;">
+    <a class="rk-btn" style="display:inline-block; text-decoration:none; background:#166534 !important; font-size:12px !important; padding:8px 14px !important;"
+       href="ranking_export.php?url=<?php echo urlencode($_GET['url'] ?? ''); ?>">&#11015; Descargar Excel</a>
+  </div>
+
   <!-- ═══ TOP 10 GLOBAL ═══ -->
   <?php if(!empty($top10Global) && $buscado === ''): ?>
   <div class="rk-top10">
@@ -679,38 +752,8 @@ foreach($ACategorias as $acategoria):
       </div>
 
 <?php
-// ═══ FASE 1: recolectar todos los jugadores de esta categoría
-//     y calcular su total real evento por evento ═══════════════
-$jugadoresCat = [];
-$yaVisto      = [];
-foreach($puntosAll as $cadaPunto):
-	if(!isset($cadaPunto[$acategoria])) continue;
-	foreach($cadaPunto[$acategoria] as $cadaParticipante):
-		$ci = $cadaParticipante[0];
-		if(isset($yaVisto[$ci])) continue;
-		$yaVisto[$ci] = true;
-
-		$ptosMixtoReal = 0;
-		$ptosHijoReal  = 0;
-
-		foreach(rk_eventos($ci,$acategoria,$padreCat) as $evId):
-			// FIX 02/06/2026: puntos puros, sin restar padre
-			$ptosMixtoReal += rk_puntos($evId,$padreCat,$ci);
-			$ptosHijoReal  += rk_puntos($evId,$acategoria,$ci);
-		endforeach;
-
-		$jugadoresCat[] = [
-			'ci'        => $ci,
-			'idRanking' => $cadaParticipante[2],
-			'ptosMixto' => $ptosMixtoReal,
-			'ptosHijo'  => $ptosHijoReal,
-			'total'     => $ptosMixtoReal + $ptosHijoReal,
-		];
-	endforeach;
-endforeach;
-
-// ═══ Ordenar por total real desc ════════════════════════════════
-usort($jugadoresCat, fn($a,$b) => $b['total'] <=> $a['total']);
+// ═══ FASE 1: jugadores de la categoría con su total real, ya ordenados ═══
+$jugadoresCat = rk_jugadores_cat($acategoria,$padreCat);
 
 // ═══ FASE 2: renderizar en el orden correcto ════════════════════
 $x1 = 0;
