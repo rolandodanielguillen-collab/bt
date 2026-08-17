@@ -89,7 +89,7 @@ function prefijo_partido(string $nombreGrupo, int $nro): string {
 }
 
 // ── Whitelist: cualquier cosa fuera de acá se rechaza ────────────
-const ACCIONES = ['eventos', 'categorias', 'parejas', 'resultados', 'ranking', 'buscar_jugador', 'en_juego'];
+const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'ranking', 'buscar_jugador', 'en_juego'];
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
@@ -190,6 +190,112 @@ if ($action === 'en_juego') {
     }
 
     resp(['success' => true, 'partidos' => $partidos]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// evento — ficha completa de una fecha (pantalla Detalle del torneo)
+// Lo que la web muestra en inscripcion.php + grafico-llaves-v2 DETALLES:
+// fechas, ciudad, sede (complejo), cierre de inscripción, costo, premios,
+// bases, y las categorías del evento con sexo, cupo y parejas inscriptas.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'evento') {
+    $id = intGet('id');
+    if (!$id) respErr('Falta id');
+
+    $st = $mysqli2->prepare(
+        "SELECT e.id, e.evento, e.nombre_evento2, e.url_amigable, e.fecha, e.fecha_fin, e.estado,
+                e.flyer, e.id_circuito, e.id_tipo_evento, e.fecha_fin_inscripcion, e.hora_fin_inscripcion,
+                e.costo1, e.costo2, e.premios, e.base_condiciones, e.reglamentacion, e.detalle,
+                e.boton_inscripcion, e.cupos,
+                c.nombre AS circuito, ci.nombre AS ciudad
+         FROM _p_eventos e
+         LEFT JOIN _circuitos c ON c.id = e.id_circuito
+         LEFT JOIN ciudadespy ci ON ci.id = e.id_ciudad
+         WHERE e.id = ? AND e.estado NOT IN ('inactivo','previsualizacion')
+         LIMIT 1"
+    );
+    $st->bind_param('i', $id);
+    $st->execute();
+    $ev = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$ev) respErr('Evento no encontrado', 404);
+
+    // Sede: complejo(s) del evento (puede no haber ninguno cargado).
+    $sedes = [];
+    $st = $mysqli2->prepare(
+        "SELECT p.nombre, p.gmaps FROM _relacion_evento_complejo r
+         JOIN _p_complejos p ON p.id = r.id_complejo
+         WHERE r.id_evento = ? AND p.estado = 'activo'"
+    );
+    $st->bind_param('i', $id);
+    $st->execute();
+    $rs = $st->get_result();
+    while ($row = $rs->fetch_assoc()) $sedes[] = ['nombre' => trim($row['nombre']), 'mapa' => $row['gmaps'] ?: null];
+    $st->close();
+
+    // Categorías del evento (activas) con parejas inscriptas.
+    $cats = [];
+    $st = $mysqli2->prepare(
+        "SELECT rc.id_categoria, c.categoria, rc.sexo, rc.cupo, rc.costo, rc.max_parejas, rc.orden_visualizacion,
+                (SELECT FLOOR(COUNT(*)/2) FROM _p_incripciones i
+                  WHERE i.id_evento = rc.id_evento AND i.id_categoria = rc.id_categoria AND i.estado <> 'bloqueado') AS parejas
+         FROM _relacion_evento_categoria rc
+         JOIN _p_categorias c ON c.id = rc.id_categoria
+         WHERE rc.id_evento = ? AND rc.estado = 'activo'
+         ORDER BY rc.orden_visualizacion ASC, c.categoria ASC"
+    );
+    $st->bind_param('i', $id);
+    $st->execute();
+    $rs = $st->get_result();
+    while ($row = $rs->fetch_assoc()) {
+        $cats[] = [
+            'id'      => (int)$row['id_categoria'],
+            'nombre'  => $row['categoria'],
+            'sexo'    => $row['sexo'] ?: null,           // hombre | mujer | mixto
+            'cupo'    => $row['cupo'] ?: 'disponible',   // disponible | lleno
+            'costo'   => (int)$row['costo'],
+            'parejas' => (int)$row['parejas'],
+        ];
+    }
+    $st->close();
+
+    $ri = $mysqli2->query("SELECT COUNT(*) as c FROM _p_incripciones WHERE id_evento='$id' AND estado<>'bloqueado'");
+    $inscriptos = $ri ? (int)floor((int)$ri->fetch_assoc()['c'] / 2) : 0;
+
+    // base_condiciones: 'b' = usa el PDF genérico del sitio (así lo hace inscripcion.php).
+    $basesUrl = ($ev['base_condiciones'] && $ev['base_condiciones'] !== 'b')
+        ? $ev['base_condiciones']
+        : '/bases-y-condiciones/aceptacion-de-bases-y-condiciones-del-torneo-de-padel-general.pdf';
+
+    resp([
+        'success' => true,
+        'evento' => [
+            'id'                  => (int)$ev['id'],
+            'evento'              => $ev['evento'],
+            'subtitulo'           => $ev['nombre_evento2'] ?: null,
+            'url_amigable'        => $ev['url_amigable'],
+            'fecha'               => $ev['fecha'],
+            'fecha_fin'           => $ev['fecha_fin'],
+            'estado'              => $ev['estado'],
+            'flyer_url'           => !empty($ev['flyer']) ? '/img/flyers/' . $ev['flyer'] : null,
+            'id_circuito'         => $ev['id_circuito'],
+            'circuito'            => $ev['circuito'],
+            'id_tipo_evento'      => $ev['id_tipo_evento'],
+            'ciudad'              => $ev['ciudad'] ?: null,
+            'sedes'               => $sedes,
+            'fecha_fin_inscripcion' => $ev['fecha_fin_inscripcion'] ?: null,
+            'hora_fin_inscripcion'  => $ev['hora_fin_inscripcion'] ?: null,
+            'costo'               => (int)$ev['costo1'],
+            'costo_tardio'        => (int)$ev['costo2'],
+            'premios'             => $ev['premios'] ?: null,
+            'bases_url'           => $basesUrl,
+            'reglamento_html'     => $ev['reglamentacion'] ?: null,
+            'cronograma_html'     => $ev['detalle'] ?: null,
+            'boton_inscripcion'   => $ev['boton_inscripcion'] ?: 'si',
+            'inscriptos'          => $inscriptos,
+            'categorias'          => $cats,
+        ],
+    ]);
 }
 
 // ══════════════════════════════════════════════════════════════════
