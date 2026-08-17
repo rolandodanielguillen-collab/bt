@@ -206,7 +206,7 @@ if ($action === 'evento') {
         "SELECT e.id, e.evento, e.nombre_evento2, e.url_amigable, e.fecha, e.fecha_fin, e.estado,
                 e.flyer, e.id_circuito, e.id_tipo_evento, e.fecha_fin_inscripcion, e.hora_fin_inscripcion,
                 e.costo1, e.costo2, e.premios, e.base_condiciones, e.reglamentacion, e.detalle,
-                e.boton_inscripcion, e.cupos,
+                e.descripcion, e.flyer2, e.boton_inscripcion, e.cupos,
                 c.nombre AS circuito, ci.nombre AS ciudad
          FROM _p_eventos e
          LEFT JOIN _circuitos c ON c.id = e.id_circuito
@@ -262,6 +262,15 @@ if ($action === 'evento') {
     $ri = $mysqli2->query("SELECT COUNT(*) as c FROM _p_incripciones WHERE id_evento='$id' AND estado<>'bloqueado'");
     $inscriptos = $ri ? (int)floor((int)$ri->fetch_assoc()['c'] / 2) : 0;
 
+    // Cronograma: la web muestra `descripcion` (un <img> con la programación) en
+    // el acordeón "Cronograma"; flyer2 es la alternativa cargada como archivo.
+    $cronogramaImg = null;
+    if (!empty($ev['flyer2'])) {
+        $cronogramaImg = '/img/flyers/' . $ev['flyer2'];
+    } elseif (!empty($ev['descripcion']) && preg_match('/<img[^>]+src="([^"]+)"/i', $ev['descripcion'], $m)) {
+        $cronogramaImg = $m[1];
+    }
+
     // base_condiciones: 'b' = usa el PDF genérico del sitio (así lo hace inscripcion.php).
     $basesUrl = ($ev['base_condiciones'] && $ev['base_condiciones'] !== 'b')
         ? $ev['base_condiciones']
@@ -290,7 +299,8 @@ if ($action === 'evento') {
             'premios'             => $ev['premios'] ?: null,
             'bases_url'           => $basesUrl,
             'reglamento_html'     => $ev['reglamentacion'] ?: null,
-            'cronograma_html'     => $ev['detalle'] ?: null,
+            'cronograma_html'     => $ev['descripcion'] ?: ($ev['detalle'] ?: null),
+            'cronograma_img'      => $cronogramaImg,
             'boton_inscripcion'   => $ev['boton_inscripcion'] ?: 'si',
             'inscriptos'          => $inscriptos,
             'categorias'          => $cats,
