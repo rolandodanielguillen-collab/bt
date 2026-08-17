@@ -8,7 +8,7 @@
  *
  * Tablas: ver `sql/2026-08-10_social.sql`.
  *
- * Acciones de lectura : muro · duplas · chats · mensajes
+ * Acciones de lectura : perfil · perfil_evento · muro · duplas · chats · mensajes
  * Acciones de escritura: publicar · comentar · like · publicar_dupla ·
  *                        abrir_chat · enviar
  * ================================================================
@@ -156,8 +156,9 @@ if ($action === 'perfil') {
     while ($row = $res->fetch_assoc()) {
         $estado = $row['estado'] ?? '';
         $inscripciones[] = [
-            'eventoId'  => (int)$row['id_evento'],
-            'evento'    => $row['nombre_evento'] ?: ('Torneo #' . $row['id_evento']),
+            'eventoId'    => (int)$row['id_evento'],
+            'categoriaId' => (int)$row['id_categoria'],
+            'evento'      => $row['nombre_evento'] ?: ('Torneo #' . $row['id_evento']),
             'fecha'     => $row['fecha_evento'] ?: substr($row['fecha_inscripcion'] ?? '', 0, 10),
             'categoria' => $row['categoria'] ?: ('Cat. ' . (int)$row['id_categoria']),
             'companero' => trim(mb_strtoupper(($row['dupla_nombre'] ?? '') . ' ' . ($row['dupla_apellido'] ?? ''), 'UTF-8')),
@@ -183,6 +184,150 @@ if ($action === 'perfil') {
             'efectividad' => $efectividad,
         ],
         'inscripciones' => $inscripciones,
+    ]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// perfil_evento — estadísticas del jugador en un evento+categoría
+// (acordeón de Inscripciones en el Perfil de la app, pedido 17-ago-2026).
+// Mismo criterio de sets que `perfil`; los nombres de fase salen del mismo
+// mapa de `_p_grupos` que usa bt_app_api.php `resultados`.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'perfil_evento') {
+    $idEvento = inpInt('evento');
+    $idCat    = inpInt('categoria');
+    if (!$idEvento || !$idCat) respErr('Falta evento o categoria');
+    $ci = $miCi;
+
+    $FASES = [
+        32 => ['nombre' => '16vos de final',   'orden' => 1],
+        26 => ['nombre' => '8vos de final',    'orden' => 2],
+        13 => ['nombre' => 'Cuartos de final', 'orden' => 3],
+        15 => ['nombre' => 'Semifinal',        'orden' => 4],
+        18 => ['nombre' => 'Final',            'orden' => 5],
+        19 => ['nombre' => '3er puesto',       'orden' => 6],
+    ];
+
+    $st = $mysqli2->prepare(
+        "SELECT t.id, t.grupo, t.partido_nro,
+                t.ci1_a, t.ci1_b, t.ci2_a, t.ci2_b,
+                t.rusultado_equipo1  AS s1e1, t.resultado_equipo2  AS s1e2,
+                t.resultado2_equipo1 AS s2e1, t.resultado2_equipo2 AS s2e2,
+                t.resultado3_equipo1 AS s3e1, t.resultado3_equipo2 AS s3e2,
+                t.en_juego,
+                g.grupo AS grupo_nombre, g.orden AS grupo_orden
+         FROM _todosvstodos t
+         LEFT JOIN _p_grupos g ON g.id = t.grupo
+         WHERE t.evento = ? AND t.categoria = ?
+           AND (t.ci1_a = ? OR t.ci1_b = ? OR t.ci2_a = ? OR t.ci2_b = ?)
+         ORDER BY g.orden ASC, t.partido_nro ASC
+         LIMIT 100"
+    );
+    $st->bind_param('iissss', $idEvento, $idCat, $ci, $ci, $ci, $ci);
+    $st->execute();
+    $res = $st->get_result();
+
+    $filas = [];
+    $cis = [];
+    while ($row = $res->fetch_assoc()) {
+        foreach (['ci1_a', 'ci1_b', 'ci2_a', 'ci2_b'] as $k) {
+            $c = (string)$row[$k];
+            if ($c !== '' && $c !== '0') $cis[$c] = true;
+        }
+        $filas[] = $row;
+    }
+    $st->close();
+
+    // Un solo SELECT de nombres para todos los CI (apellido solo: es lo que
+    // entra en una fila del acordeón).
+    $nombres = [];
+    if ($cis) {
+        $lista = implode(',', array_map(fn($c) => "'" . $mysqli2->real_escape_string($c) . "'", array_keys($cis)));
+        $rn = $mysqli2->query("SELECT ci, nombre, apellido FROM _p_usuarios WHERE ci IN ($lista)");
+        if ($rn) while ($u = $rn->fetch_assoc()) {
+            $nombres[(string)$u['ci']] = trim($u['apellido'] ?: $u['nombre']);
+        }
+    }
+    $nom = fn($c) => $nombres[(string)$c] ?? '';
+
+    $partidos = $victorias = $derrotas = 0;
+    $grupo = null;
+    $mejorFase = null;   // ['orden' => n, 'nombre' => s]
+    $lista = [];
+
+    foreach ($filas as $row) {
+        $enEquipo1 = ((int)$row['ci1_a'] === (int)$ci || (int)$row['ci1_b'] === (int)$ci);
+        $setsE1 = $setsE2 = 0;
+        $sets = [];
+        foreach ([['s1e1', 's1e2'], ['s2e1', 's2e2'], ['s3e1', 's3e2']] as $par) {
+            $a = (int)$row[$par[0]];
+            $b = (int)$row[$par[1]];
+            if ($a === 0 && $b === 0) continue;
+            if ($a > $b) $setsE1++; else $setsE2++;
+            // Los sets se muestran desde el lado del jugador.
+            $sets[] = $enEquipo1 ? "$a-$b" : "$b-$a";
+        }
+        $jugado = ($setsE1 + $setsE2) > 0;
+        $gano = null;
+        if ($jugado) {
+            $ganoE1 = $setsE1 > $setsE2;
+            $gano = ($enEquipo1 && $ganoE1) || (!$enEquipo1 && !$ganoE1);
+            $partidos++;
+            if ($gano) $victorias++; else $derrotas++;
+        }
+
+        $idGrupo = (int)$row['grupo'];
+        $esEliminatoria = isset($FASES[$idGrupo]);
+        $fase = $esEliminatoria ? $FASES[$idGrupo]['nombre'] : (string)($row['grupo_nombre'] ?? '');
+        if (!$esEliminatoria && $grupo === null && $fase !== '') $grupo = $fase;
+        if ($esEliminatoria) {
+            $orden = $FASES[$idGrupo]['orden'];
+            // El 3er puesto no es "más lejos" que la final; se cuenta como semi jugada.
+            if ($idGrupo === 19) $orden = 4;
+            $nombreFase = $FASES[$idGrupo]['nombre'];
+            if ($idGrupo === 18 && $gano === true) { $orden = 7; $nombreFase = 'Campeón'; }
+            if ($mejorFase === null || $orden > $mejorFase['orden']) $mejorFase = ['orden' => $orden, 'nombre' => $nombreFase];
+        }
+
+        $rivalA = $enEquipo1 ? $row['ci2_a'] : $row['ci1_a'];
+        $rivalB = $enEquipo1 ? $row['ci2_b'] : $row['ci1_b'];
+        $compCi = $enEquipo1
+            ? ((int)$row['ci1_a'] === (int)$ci ? $row['ci1_b'] : $row['ci1_a'])
+            : ((int)$row['ci2_a'] === (int)$ci ? $row['ci2_b'] : $row['ci2_a']);
+
+        $lista[] = [
+            'id'        => (int)$row['id'],
+            'rival'     => trim($nom($rivalA) . ' / ' . $nom($rivalB), ' /'),
+            'companero' => $nom($compCi),
+            'sets'      => $sets,
+            'gano'      => $gano,
+            'fase'      => $fase,
+            'enJuego'   => ($row['en_juego'] ?? 'no') === 'si',
+        ];
+    }
+
+    // Posición en el grupo: ya calculada en tabla_auxiliar (sólo lectura).
+    $posicion = null;
+    $st = $mysqli2->prepare(
+        "SELECT la_posicion FROM tabla_auxiliar
+         WHERE id_evento = ? AND id_categoria = ? AND (ci1_a = ? OR ci1_b = ?)
+         ORDER BY la_posicion ASC LIMIT 1"
+    );
+    $st->bind_param('iiss', $idEvento, $idCat, $ci, $ci);
+    $st->execute();
+    $rp = $st->get_result()->fetch_assoc();
+    $st->close();
+    if ($rp && (int)$rp['la_posicion'] > 0) $posicion = (int)$rp['la_posicion'];
+
+    resp([
+        'success'       => true,
+        'partidos'      => $partidos,
+        'victorias'     => $victorias,
+        'derrotas'      => $derrotas,
+        'grupo'         => $grupo,
+        'posicion'      => $posicion,
+        'faseAlcanzada' => $mejorFase ? $mejorFase['nombre'] : ($grupo ?: null),
+        'lista'         => $lista,
     ]);
 }
 
