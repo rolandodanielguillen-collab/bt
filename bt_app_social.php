@@ -126,7 +126,40 @@ if ($action === 'perfil') {
 
     $efectividad = $partidos > 0 ? round($victorias * 100 / $partidos, 1) : 0;
 
-    // Inscripciones: mismo SELECT que la web.
+    // Trofeos: réplica de perfil_jugador.inc.php — finales jugadas (grupo=18),
+    // ganada = campeón, perdida = finalista. Mismo conteo de sets.
+    $campeon = $finalista = 0;
+    $st = $mysqli2->prepare(
+        "SELECT ci1_a, ci1_b, ci2_a, ci2_b,
+                rusultado_equipo1  AS s1e1, resultado_equipo2  AS s1e2,
+                resultado2_equipo1 AS s2e1, resultado2_equipo2 AS s2e2,
+                resultado3_equipo1 AS s3e1, resultado3_equipo2 AS s3e2
+         FROM _todosvstodos
+         WHERE grupo = 18
+           AND (ci1_a = ? OR ci1_b = ? OR ci2_a = ? OR ci2_b = ?)
+           AND (rusultado_equipo1 > 0 OR resultado_equipo2 > 0)"
+    );
+    $st->bind_param('ssss', $ci, $ci, $ci, $ci);
+    $st->execute();
+    $res = $st->get_result();
+    while ($row = $res->fetch_assoc()) {
+        $enEquipo1 = ((int)$row['ci1_a'] === (int)$ci || (int)$row['ci1_b'] === (int)$ci);
+        $setsE1 = $setsE2 = 0;
+        foreach ([['s1e1', 's1e2'], ['s2e1', 's2e2'], ['s3e1', 's3e2']] as $par) {
+            $a = (int)$row[$par[0]];
+            $b = (int)$row[$par[1]];
+            if ($a === 0 && $b === 0) continue;
+            if ($a > $b) $setsE1++; else $setsE2++;
+        }
+        if ($setsE1 === 0 && $setsE2 === 0) continue;
+        $ganoE1 = $setsE1 > $setsE2;
+        if (($enEquipo1 && $ganoE1) || (!$enEquipo1 && !$ganoE1)) $campeon++;
+        else $finalista++;
+    }
+    $st->close();
+
+    // Inscripciones: mismo SELECT que la web. LIMIT amplio: la app agrupa por
+    // evento y pagina de a 10 eventos del lado del cliente.
     $st = $mysqli2->prepare(
         "SELECT i.id_evento, i.id_categoria, i.ci_dupla, i.estado, i.fecha_inscripcion,
                 e.evento AS nombre_evento,
@@ -138,8 +171,8 @@ if ($action === 'perfil') {
          LEFT JOIN _p_categorias c ON c.id = i.id_categoria
          LEFT JOIN _p_usuarios d ON d.ci = i.ci_dupla
          WHERE i.ci = ?
-         ORDER BY i.fecha_inscripcion DESC
-         LIMIT 50"
+         ORDER BY e.fecha DESC, i.fecha_inscripcion DESC
+         LIMIT 200"
     );
     $st->bind_param('s', $ci);
     $st->execute();
@@ -182,6 +215,10 @@ if ($action === 'perfil') {
             'victorias'   => $victorias,
             'derrotas'    => $derrotas,
             'efectividad' => $efectividad,
+        ],
+        'trofeos' => [
+            'campeon'   => $campeon,
+            'finalista' => $finalista,
         ],
         'inscripciones' => $inscripciones,
     ]);
