@@ -100,8 +100,10 @@ if (!in_array($action, ACCIONES, true)) respErr('Acción no disponible', 404);
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'eventos') {
     // `previsualizacion` es un borrador del admin: no se muestra en la app.
+    // id_tipo_evento 5 = Interclubes (clubes, sorteo, series): la app lo abre
+    // en grafico-interclubes.php como hace la web, no en el detalle de parejas.
     $sql = "SELECT e.id, e.evento, e.url_amigable, e.fecha, e.fecha_fin, e.estado,
-                   e.flyer, e.id_circuito, e.fecha_fin_inscripcion,
+                   e.flyer, e.id_circuito, e.fecha_fin_inscripcion, e.id_tipo_evento,
                    c.nombre AS circuito
             FROM _p_eventos e
             LEFT JOIN _circuitos c ON c.id = e.id_circuito
