@@ -89,7 +89,7 @@ function prefijo_partido(string $nombreGrupo, int $nro): string {
 }
 
 // ── Whitelist: cualquier cosa fuera de acá se rechaza ────────────
-const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'ranking_interclubes', 'buscar_jugador', 'en_juego'];
+const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'ranking_interclubes', 'circuitos', 'estadisticas', 'buscar_jugador', 'en_juego'];
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
@@ -1058,6 +1058,87 @@ if ($action === 'ranking_interclubes') {
         'clubes'           => $clubesOut,
         'escala'           => $escalasDistintas ? null : $conteoOut($esc1),
     ]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// circuitos — organizadores/circuitos activos, para el selector del Ranking.
+// Hoy hay uno solo; la app muestra el selector recién cuando haya más de uno.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'circuitos') {
+    $r = $mysqli2->query("SELECT id, nombre, url_amigable FROM _circuitos WHERE estado = 'activo' ORDER BY orden_visualizacion ASC, id ASC");
+    $out = [];
+    if ($r) while ($c = $r->fetch_assoc()) $out[] = ['id' => (int)$c['id'], 'nombre' => $c['nombre'], 'url' => $c['url_amigable']];
+    resp(['success' => true, 'circuitos' => $out]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// estadisticas — MISMA lógica que logica/estadisticas.inc.php: jugadores con
+// partidos cargados en _todosvstodos que matchean q (nombre, apellido o CI);
+// PJ/PG por sets, orden por PG desc. Público, sin login, como la web.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'estadisticas') {
+    $q = trim(strGet('q'));
+    if (mb_strlen($q) < 3) respErr('Mínimo 3 caracteres para buscar');
+    $like = '%' . $mysqli2->real_escape_string($q) . '%';
+    $st = $mysqli2->prepare(
+        "SELECT DISTINCT u.ci, u.nombre, u.apellido, u.ciudad
+           FROM _p_usuarios u
+          WHERE u.ci IN (
+                SELECT DISTINCT ci1_a FROM _todosvstodos WHERE ci1_a > 0
+                UNION SELECT DISTINCT ci1_b FROM _todosvstodos WHERE ci1_b > 0
+                UNION SELECT DISTINCT ci2_a FROM _todosvstodos WHERE ci2_a > 0
+                UNION SELECT DISTINCT ci2_b FROM _todosvstodos WHERE ci2_b > 0)
+            AND (CONCAT(u.nombre, ' ', u.apellido) COLLATE utf8mb4_general_ci LIKE ? OR u.ci LIKE ?)
+          ORDER BY u.apellido ASC
+          LIMIT 40");
+    $st->bind_param('ss', $like, $like);
+    $st->execute();
+    $jugs = $st->get_result()->fetch_all(MYSQLI_ASSOC);
+    $st->close();
+
+    $stT = $mysqli2->prepare(
+        "SELECT ci1_a, ci1_b, ci2_a, ci2_b,
+                rusultado_equipo1 AS s1e1, resultado_equipo2 AS s1e2,
+                resultado2_equipo1 AS s2e1, resultado2_equipo2 AS s2e2,
+                resultado3_equipo1 AS s3e1, resultado3_equipo2 AS s3e2
+           FROM _todosvstodos
+          WHERE (ci1_a = ? OR ci1_b = ? OR ci2_a = ? OR ci2_b = ?)
+            AND (rusultado_equipo1 > 0 OR resultado_equipo2 > 0)");
+    $out = [];
+    foreach ($jugs as $j) {
+        $ci = (string)$j['ci'];
+        $stT->bind_param('ssss', $ci, $ci, $ci, $ci);
+        $stT->execute();
+        $res = $stT->get_result();
+        $pj = $pg = 0;
+        while ($row = $res->fetch_assoc()) {
+            $enE1 = ((int)$row['ci1_a'] === (int)$ci || (int)$row['ci1_b'] === (int)$ci);
+            $se1 = $se2 = 0;
+            foreach ([['s1e1', 's1e2'], ['s2e1', 's2e2'], ['s3e1', 's3e2']] as $p) {
+                $a = (int)$row[$p[0]]; $b = (int)$row[$p[1]];
+                if ($a === 0 && $b === 0) continue;
+                if ($a > $b) $se1++; else $se2++;
+            }
+            if ($se1 === 0 && $se2 === 0) continue;
+            $pj++;
+            $gano = $se1 > $se2;
+            if (($enE1 && $gano) || (!$enE1 && !$gano)) $pg++;
+        }
+        if ($pj === 0) continue;
+        $out[] = [
+            'ci'          => $ci,
+            'nombre'      => mb_strtoupper(trim($j['nombre'] ?? ''), 'UTF-8'),
+            'apellido'    => mb_strtoupper(trim($j['apellido'] ?? ''), 'UTF-8'),
+            'ciudad'      => $j['ciudad'] ?? '',
+            'pj'          => $pj,
+            'pg'          => $pg,
+            'pp'          => $pj - $pg,
+            'efectividad' => round($pg * 100 / $pj, 1),
+        ];
+    }
+    $stT->close();
+    usort($out, fn($a, $b) => $b['pg'] <=> $a['pg']);
+    resp(['success' => true, 'jugadores' => $out]);
 }
 
 // ══════════════════════════════════════════════════════════════════

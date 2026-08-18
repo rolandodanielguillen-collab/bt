@@ -4,13 +4,16 @@
  * ================================================================
  * Archivo NUEVO y aislado. Todo pasa por token de jugador
  * (`bt_app_auth.php`). Ni una consulta toca las tablas del sitio salvo
- * `_p_usuarios`, y sólo para leer nombre/ciudad del autor.
+ * `_p_usuarios`: lectura de nombre/ciudad del autor, y desde el 18-ago-2026
+ * los MISMOS updates que ya hacen actualizar-perfil.php / subir-foto.php /
+ * cambiar-password.php (con sesión web) — acá con token, para la app.
  *
  * Tablas: ver `sql/2026-08-10_social.sql`.
  *
  * Acciones de lectura : perfil · perfil_evento · muro · duplas · chats · mensajes
  * Acciones de escritura: publicar · comentar · like · publicar_dupla ·
- *                        abrir_chat · enviar
+ *                        abrir_chat · enviar · actualizar_perfil · subir_foto ·
+ *                        cambiar_password
  * ================================================================
  */
 
@@ -26,7 +29,7 @@ $miCi = $yo['ci'];
 $action = inp('action');
 if (!$action) respErr('Falta parámetro action');
 
-$esEscritura = in_array($action, ['publicar', 'comentar', 'like', 'publicar_dupla', 'abrir_chat', 'enviar'], true);
+$esEscritura = in_array($action, ['publicar', 'comentar', 'like', 'publicar_dupla', 'abrir_chat', 'enviar', 'actualizar_perfil', 'subir_foto', 'cambiar_password'], true);
 if ($esEscritura && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     respErr('Esta acción requiere POST', 405);
 }
@@ -209,6 +212,9 @@ if ($action === 'perfil') {
             'ciudad' => $yo['ciudad'] ?? '',
             'email'  => $yo['email'] ?? '',
             'cel'    => $yo['cel'] ?? '',
+            'foto'   => fotoUrl($yo['imagen_usuario'] ?? null),
+            /** Y-m-d o null */
+            'fechaNacimiento' => (!empty($yo['fecha_nacimiento']) && $yo['fecha_nacimiento'] !== '0000-00-00') ? $yo['fecha_nacimiento'] : null,
         ],
         'stats' => [
             'partidos'    => $partidos,
@@ -222,6 +228,119 @@ if ($action === 'perfil') {
         ],
         'inscripciones' => $inscripciones,
     ]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// actualizar_perfil — POST JSON {fecha_nacimiento?, ciudad?, cel?, email?}
+// Réplica de actualizar-perfil.php (mismas validaciones y campos), con token.
+// Sólo actualiza lo que llega; '' en fecha_nacimiento la borra.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'actualizar_perfil') {
+    $raw = json_decode(file_get_contents('php://input'), true) ?: [];
+    $sets = []; $tipos = ''; $vals = [];
+
+    if (array_key_exists('fecha_nacimiento', $raw)) {
+        $f = trim((string)$raw['fecha_nacimiento']);
+        if ($f === '') { $sets[] = 'fecha_nacimiento = NULL'; }
+        else {
+            $d = DateTime::createFromFormat('Y-m-d', $f);
+            if (!$d || $d->format('Y-m-d') !== $f) respErr('Fecha de nacimiento no válida');
+            $edad = (new DateTime())->diff($d)->y;
+            if ($edad < 5 || $edad > 99) respErr('Fecha de nacimiento fuera de rango');
+            $sets[] = 'fecha_nacimiento = ?'; $tipos .= 's'; $vals[] = $f;
+        }
+    }
+    if (array_key_exists('ciudad', $raw)) {
+        $c = trim((string)$raw['ciudad']);
+        if (mb_strlen($c) > 255) respErr('Ciudad demasiado larga');
+        $sets[] = 'ciudad = ?'; $tipos .= 's'; $vals[] = $c;
+    }
+    if (array_key_exists('cel', $raw)) {
+        $c = trim((string)$raw['cel']);
+        if ($c !== '' && !preg_match('/^[0-9+\-\s()]{6,20}$/', $c)) respErr('Número de celular no válido');
+        $sets[] = 'cel = ?'; $tipos .= 's'; $vals[] = $c;
+    }
+    if (array_key_exists('email', $raw)) {
+        $e = strtolower(trim((string)$raw['email']));
+        if ($e !== '' && !filter_var($e, FILTER_VALIDATE_EMAIL)) respErr('Email no válido');
+        $sets[] = 'email = ?'; $tipos .= 's'; $vals[] = $e;
+    }
+    if (!$sets) respErr('No se enviaron datos para actualizar');
+
+    $tipos .= 's'; $vals[] = $miCi;
+    $st = $mysqli2->prepare("UPDATE _p_usuarios SET " . implode(', ', $sets) . " WHERE TRIM(ci) = ?");
+    $st->bind_param($tipos, ...$vals);
+    $st->execute();
+    $st->close();
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// subir_foto — POST JSON {foto: "data:image/jpeg;base64,..." | base64}
+// Réplica de subir-foto.php con token: mismos tipos (jpg/png/gif/webp), mismo
+// tope (3 MB), misma carpeta y nombre (`img/usuarios/foto_<ci>.<ext>`) y el
+// mismo UPDATE de `imagen_usuario`, así la web ve la foto que sube la app.
+// La app ya la manda achicada (≤ 800 px, JPEG); acá se valida igual por si acaso.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'subir_foto') {
+    $raw = json_decode(file_get_contents('php://input'), true) ?: [];
+    $b64 = (string)($raw['foto'] ?? '');
+    if ($b64 === '') respErr('No se recibió la foto');
+    if (preg_match('#^data:image/[a-z]+;base64,#i', $b64)) $b64 = substr($b64, strpos($b64, ',') + 1);
+    $bin = base64_decode($b64, true);
+    if ($bin === false || strlen($bin) < 100) respErr('La foto no se pudo leer');
+    if (strlen($bin) > 3 * 1024 * 1024) respErr('La imagen no puede superar 3MB');
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->buffer($bin);
+    $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'][$mime] ?? null;
+    if (!$ext) respErr('Formato no permitido. Usá JPG, PNG o WEBP');
+    if (@getimagesizefromstring($bin) === false) respErr('El archivo no es una imagen válida');
+
+    $docroot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__, '/');
+    $carpeta = $docroot . '/img/usuarios/';
+    if (!is_dir($carpeta) && !mkdir($carpeta, 0755, true)) respErr('No se pudo preparar la carpeta de fotos', 500);
+    $nombre = 'foto_' . preg_replace('/[^0-9]/', '', $miCi) . '.' . $ext;
+    // Si cambia la extensión, la foto anterior queda huérfana: se borra.
+    foreach (glob($carpeta . 'foto_' . preg_replace('/[^0-9]/', '', $miCi) . '.*') ?: [] as $vieja) {
+        if (basename($vieja) !== $nombre) @unlink($vieja);
+    }
+    if (file_put_contents($carpeta . $nombre, $bin) === false) respErr('No se pudo guardar la foto', 500);
+    @chmod($carpeta . $nombre, 0644);
+
+    $rel = 'img/usuarios/' . $nombre;
+    $st = $mysqli2->prepare("UPDATE _p_usuarios SET imagen_usuario = ? WHERE TRIM(ci) = ?");
+    $st->bind_param('ss', $rel, $miCi);
+    $st->execute();
+    $st->close();
+    resp(['success' => true, 'foto' => fotoUrl($rel)]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// cambiar_password — POST JSON {pwd_actual, pwd_nueva}
+// Réplica de cambiar-password.php con token. `pase` es texto plano en el
+// sistema existente (deuda conocida): se compara y guarda igual que la web.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'cambiar_password') {
+    $raw = json_decode(file_get_contents('php://input'), true) ?: [];
+    $actual = trim((string)($raw['pwd_actual'] ?? ''));
+    $nueva  = trim((string)($raw['pwd_nueva'] ?? ''));
+    if ($actual === '') respErr('Ingresá tu contraseña actual');
+    if (strlen($nueva) < 8) respErr('La nueva contraseña debe tener mínimo 8 caracteres');
+
+    $st = $mysqli2->prepare("SELECT pase FROM _p_usuarios WHERE TRIM(ci) = ? LIMIT 1");
+    $st->bind_param('s', $miCi);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$row) respErr('Usuario no encontrado', 404);
+    if (trim((string)$row['pase']) !== $actual) respErr('La contraseña actual es incorrecta');
+
+    $st = $mysqli2->prepare("UPDATE _p_usuarios SET pase = ? WHERE TRIM(ci) = ?");
+    $st->bind_param('ss', $nueva, $miCi);
+    $st->execute();
+    $st->close();
+    resp(['success' => true]);
 }
 
 // ══════════════════════════════════════════════════════════════════

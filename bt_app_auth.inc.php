@@ -89,7 +89,7 @@ function jugadorActual(mysqli $db): array {
     if ($token === '') respErr('No autenticado', 401);
 
     $st = $db->prepare(
-        "SELECT s.ci, u.nombre, u.apellido, u.ciudad, u.email, u.cel
+        "SELECT s.ci, u.nombre, u.apellido, u.ciudad, u.email, u.cel, u.imagen_usuario, u.fecha_nacimiento
          FROM _sesion_usuario s
          JOIN _p_usuarios u ON u.ci = s.ci
          WHERE s.token = ?
@@ -103,6 +103,21 @@ function jugadorActual(mysqli $db): array {
 
     if (!$row) respErr('Sesión inválida', 401);
     return $row;
+}
+
+/**
+ * URL absoluta de la foto de perfil, o null si no tiene.
+ * `_p_usuarios.imagen_usuario` guarda dos formatos: `img/usuarios/foto_<ci>.jpg`
+ * (subir-foto.php, el actual) o sólo el nombre de archivo en `/img/usuario/`
+ * (perfil.inc.php, el viejo). Cache-bust por fecha del archivo.
+ */
+function fotoUrl(?string $imagen): ?string {
+    $imagen = trim((string)$imagen);
+    if ($imagen === '' || $imagen === 'default.jpg') return null;
+    $rel = str_contains($imagen, '/') ? ltrim($imagen, '/') : 'img/usuario/' . $imagen;
+    $abs = rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__, '/') . '/' . $rel;
+    if (!is_file($abs)) return null;
+    return 'https://bt.com.py/' . $rel . '?v=' . filemtime($abs);
 }
 
 /** Nombre visible de un jugador, ya armado. */
