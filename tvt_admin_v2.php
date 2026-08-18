@@ -349,6 +349,9 @@ tr:hover td{background:var(--bg-hover)}
     <?php if ($adminTipo === 'superadmin'): ?>
     <div class="nav-i" onclick="goPage('circuitos')"><i class="fas fa-flag-checkered"></i> Circuitos</div>
     <div class="nav-i" onclick="goPage('log')"><i class="fas fa-list-check"></i> Log</div>
+    <div class="nav-l" style="margin-top:8px;">App móvil</div>
+    <div class="nav-i" onclick="goPage('moderacion')"><i class="fas fa-shield-halved"></i> Moderación <span class="nav-badge" id="navModBadge" style="display:none;">0</span></div>
+    <div class="nav-i" onclick="goPage('avisos')"><i class="fas fa-bell"></i> Avisos app</div>
     <?php endif; ?>
   </div>
   <div class="nav-s">
@@ -741,6 +744,7 @@ tr:hover td{background:var(--bg-hover)}
         <div id="logPag" style="padding:12px 16px;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;"></div>
       </div>
     </div>
+    <?php include __DIR__ . '/bt_app_admin.inc.php'; // Moderación + Avisos app (18-ago-2026) ?>
     <?php endif; ?>
 
   </div><!-- /content -->

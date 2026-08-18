@@ -2185,5 +2185,8 @@ if ($action === 'editar_jugador_pareja') {
     resp(['success' => true, 'mensaje' => 'Jugador reemplazado']);
 }
 
+// ── Acciones de la app móvil (moderación, avisos push) — 18-ago-2026 ──
+require_once __DIR__ . '/bt_app_admin.actions.php';
+
 // ── Si ninguna acción coincidió ──
 respErr("Acción '$action' no reconocida.");

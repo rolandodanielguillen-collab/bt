@@ -88,3 +88,7 @@ CREATE TABLE IF NOT EXISTS `_app_difusiones` (
   PRIMARY KEY (`id`),
   KEY `idx_pendientes` (`enviado_en`, `creado`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tipos nuevos de notificación in-app: difusiones del admin y avisos del sistema (suspensiones).
+ALTER TABLE `_app_notificaciones`
+  MODIFY `tipo` ENUM('partido','dupla','ranking','fixture','pago','mencion','comentario','mensaje','difusion','sistema') NOT NULL;
