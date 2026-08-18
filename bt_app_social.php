@@ -18,6 +18,7 @@
  */
 
 require_once __DIR__ . '/bt_app_auth.inc.php';
+require_once __DIR__ . '/bt_app_moderacion.inc.php';
 
 /** Techo de caracteres. Un muro sin límite se llena de basura pegada. */
 const MAX_TEXTO = 1000;
@@ -29,7 +30,8 @@ $miCi = $yo['ci'];
 $action = inp('action');
 if (!$action) respErr('Falta parámetro action');
 
-$esEscritura = in_array($action, ['publicar', 'comentar', 'like', 'publicar_dupla', 'abrir_chat', 'enviar', 'actualizar_perfil', 'subir_foto', 'cambiar_password'], true);
+$esEscritura = in_array($action, ['publicar', 'comentar', 'like', 'publicar_dupla', 'abrir_chat', 'enviar', 'actualizar_perfil', 'subir_foto', 'cambiar_password',
+                                    'aceptar_terminos', 'bloquear', 'desbloquear', 'denunciar', 'marcar_leidas', 'eliminar_cuenta'], true);
 if ($esEscritura && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     respErr('Esta acción requiere POST', 405);
 }
@@ -51,7 +53,34 @@ function textoValido(string $campo = 'texto'): string {
     $t = trim(inp($campo));
     if ($t === '') respErr('El texto no puede estar vacío');
     if (mb_strlen($t) > MAX_TEXTO) respErr('El texto es demasiado largo (máx. ' . MAX_TEXTO . ')');
+    if (textoProhibido($t)) respErr('Ese texto no cumple las normas de la comunidad.');
     return $t;
+}
+
+/**
+ * Guardia de las escrituras de Comunidad (Google Play UGC / App Store 1.2):
+ * términos aceptados y sin suspensión. Devuelve `codigo` para que la app sepa
+ * qué mostrar (`terminos` → pantalla de normas; `suspendido` → aviso con fecha).
+ */
+function exigirComunidad(mysqli $db, string $ci): void {
+    $j = jugadorApp($db, $ci);
+    if (!terminosAceptados($j)) {
+        http_response_code(403);
+        resp(['success' => false, 'codigo' => 'terminos', 'error' => 'Antes tenés que aceptar las normas de la comunidad.', 'version' => TERMINOS_VERSION]);
+    }
+    if ($susp = suspension($j)) {
+        http_response_code(403);
+        $hasta = $susp['hasta'] === '9999-12-31 00:00:00' ? 'de forma permanente' : 'hasta el ' . date('d/m/Y H:i', strtotime($susp['hasta']));
+        resp(['success' => false, 'codigo' => 'suspendido', 'error' => "Tu cuenta está suspendida en la comunidad {$hasta}. Motivo: {$susp['motivo']}", 'hasta' => $susp['hasta']]);
+    }
+}
+
+/** Anti-flood: la última fila de `$tabla` del jugador no puede tener menos de FLOOD_SEGUNDOS. */
+function exigirCalma(mysqli $db, string $tabla, string $ci): void {
+    $st = $db->prepare("SELECT TIMESTAMPDIFF(SECOND, MAX(creado), NOW()) AS s FROM `$tabla` WHERE ci_autor = ?");
+    $st->bind_param('s', $ci); $st->execute();
+    $r = $st->get_result()->fetch_assoc(); $st->close();
+    if ($r && $r['s'] !== null && (int)$r['s'] < FLOOD_SEGUNDOS) respErr('Esperá unos segundos antes de publicar de nuevo.');
 }
 
 /**
@@ -76,6 +105,10 @@ function guardarMenciones(mysqli $db, string $origen, int $idOrigen, string $tex
         if ($u) {
             $ins->bind_param('sis', $origen, $idOrigen, $u['ci']);
             $ins->execute();
+            if ($ins->affected_rows > 0) {
+                $destino = $origen === 'post' ? "/comunidad?post=$idOrigen" : ($origen === 'mensaje' ? null : "/comunidad");
+                notificar($db, (string)$u['ci'], 'mencion', 'Te mencionaron en la comunidad', mb_substr($texto, 0, 120), $destino);
+            }
         }
     }
     $st->close();
@@ -492,6 +525,7 @@ if ($action === 'perfil_evento') {
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'muro') {
     $desde = inpInt('desde', 0);
+    $sinBloq = sqlNoEn($mysqli2, 'p.ci_autor', bloqueadosPor($mysqli2, $miCi));
 
     $st = $mysqli2->prepare(
         "SELECT p.id, p.texto, p.imagen, p.creado, p.likes, p.comentarios,
@@ -499,7 +533,7 @@ if ($action === 'muro') {
                 (SELECT COUNT(*) FROM _app_likes l WHERE l.id_post = p.id AND l.ci = ?) AS mi_like
          FROM _app_posts p
          LEFT JOIN _p_usuarios u ON u.ci = p.ci_autor
-         WHERE p.estado = 'publicado'
+         WHERE p.estado = 'publicado' $sinBloq
          ORDER BY p.creado DESC
          LIMIT ? OFFSET ?"
     );
@@ -520,6 +554,7 @@ if ($action === 'muro') {
             'imagenUrl'  => $row['imagen'],
             'likes'      => (int)$row['likes'],
             'meGusta'    => (int)$row['mi_like'] > 0,
+            'mio'        => (string)$row['ci'] === $miCi,
             'comentarios' => [],
         ];
     }
@@ -528,11 +563,12 @@ if ($action === 'muro') {
     // Comentarios de todos los posts en UNA query, no una por post.
     if ($ids) {
         $in = implode(',', array_fill(0, count($ids), '?'));
+        $sinBloqC = sqlNoEn($mysqli2, 'c.ci_autor', bloqueadosPor($mysqli2, $miCi));
         $sql = "SELECT c.id, c.id_post, c.id_padre, c.texto, c.creado,
                        u.ci, u.nombre, u.apellido, u.ciudad
                 FROM _app_comentarios c
                 LEFT JOIN _p_usuarios u ON u.ci = c.ci_autor
-                WHERE c.estado = 'publicado' AND c.id_post IN ($in)
+                WHERE c.estado = 'publicado' AND c.id_post IN ($in) $sinBloqC
                 ORDER BY c.creado ASC";
         $stc = $mysqli2->prepare($sql);
         $stc->bind_param(str_repeat('i', count($ids)), ...$ids);
@@ -575,6 +611,8 @@ if ($action === 'muro') {
 // publicar — nuevo post en el muro
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'publicar') {
+    exigirComunidad($mysqli2, $miCi);
+    exigirCalma($mysqli2, '_app_posts', $miCi);
     $texto = textoValido();
     $circ  = inpInt('circuito', 0) ?: null;
 
@@ -592,15 +630,18 @@ if ($action === 'publicar') {
 // comentar — comentario o respuesta (un solo nivel)
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'comentar') {
+    exigirComunidad($mysqli2, $miCi);
+    exigirCalma($mysqli2, '_app_comentarios', $miCi);
     $idPost = inpInt('post');
     $idPadre = inpInt('padre', 0) ?: null;
     $texto = textoValido();
     if (!$idPost) respErr('Falta post');
 
-    $st = $mysqli2->prepare("SELECT id FROM _app_posts WHERE id = ? AND estado = 'publicado' LIMIT 1");
+    $st = $mysqli2->prepare("SELECT id, ci_autor FROM _app_posts WHERE id = ? AND estado = 'publicado' LIMIT 1");
     $st->bind_param('i', $idPost);
     $st->execute();
-    if (!$st->get_result()->fetch_assoc()) respErr('El post no existe', 404);
+    $post = $st->get_result()->fetch_assoc();
+    if (!$post) respErr('El post no existe', 404);
     $st->close();
 
     // Una respuesta a una respuesta se aplana al comentario raíz: el diseño
@@ -626,6 +667,9 @@ if ($action === 'comentar') {
     $st->close();
 
     guardarMenciones($mysqli2, 'comentario', $id, $texto);
+    if ((string)$post['ci_autor'] !== $miCi) {
+        notificar($mysqli2, (string)$post['ci_autor'], 'comentario', 'Comentaron tu publicación', mb_substr($texto, 0, 120), "/comunidad?post=$idPost");
+    }
     resp(['success' => true, 'id' => $id]);
 }
 
@@ -633,6 +677,7 @@ if ($action === 'comentar') {
 // like — alterna el me gusta. La UNIQUE de la tabla evita duplicados.
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'like') {
+    exigirComunidad($mysqli2, $miCi);
     $idPost = inpInt('post');
     if (!$idPost) respErr('Falta post');
 
@@ -665,13 +710,14 @@ if ($action === 'like') {
 // duplas — avisos de "busco compañero/a" abiertos
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'duplas') {
+    $sinBloq = sqlNoEn($mysqli2, 'd.ci_autor', bloqueadosPor($mysqli2, $miCi));
     $st = $mysqli2->prepare(
         "SELECT d.id, d.texto, d.disponibilidad, d.creado, c.categoria,
                 u.ci, u.nombre, u.apellido, u.ciudad
          FROM _app_busca_dupla d
          LEFT JOIN _p_usuarios u ON u.ci = d.ci_autor
          LEFT JOIN _p_categorias c ON c.id = d.id_categoria
-         WHERE d.estado = 'abierta'
+         WHERE d.estado = 'abierta' $sinBloq
          ORDER BY d.creado DESC
          LIMIT 50"
     );
@@ -685,6 +731,7 @@ if ($action === 'duplas') {
             'categoria' => $row['categoria'] ?? '',
             'texto' => $row['texto'],
             'disponibilidad' => $row['disponibilidad'] ?? '',
+            'mio'   => (string)$row['ci'] === $miCi,
         ];
     }
     $st->close();
@@ -692,6 +739,8 @@ if ($action === 'duplas') {
 }
 
 if ($action === 'publicar_dupla') {
+    exigirComunidad($mysqli2, $miCi);
+    exigirCalma($mysqli2, '_app_busca_dupla', $miCi);
     $texto = textoValido();
     $cat = inpInt('categoria', 0) ?: null;
     $disp = substr(inp('disponibilidad', ''), 0, 160);
@@ -708,6 +757,8 @@ if ($action === 'publicar_dupla') {
 // chats — conversaciones del jugador logueado
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'chats') {
+    // Bloqueo en cualquiera de los dos sentidos: el chat desaparece de la lista.
+    $sinBloq = sqlNoEn($mysqli2, 'IF(ch.ci_a = \'' . $mysqli2->real_escape_string($miCi) . '\', ch.ci_b, ch.ci_a)', bloqueosDe($mysqli2, $miCi));
     $st = $mysqli2->prepare(
         "SELECT ch.id, ch.ci_a, ch.ci_b, ch.ultimo_msg,
                 u.ci, u.nombre, u.apellido, u.ciudad,
@@ -715,7 +766,7 @@ if ($action === 'chats') {
                 (SELECT COUNT(*) FROM _app_mensajes m WHERE m.id_chat = ch.id AND m.leido IS NULL AND m.ci_autor <> ?) AS sin_leer
          FROM _app_chats ch
          LEFT JOIN _p_usuarios u ON u.ci = IF(ch.ci_a = ?, ch.ci_b, ch.ci_a)
-         WHERE ch.ci_a = ? OR ch.ci_b = ?
+         WHERE (ch.ci_a = ? OR ch.ci_b = ?) $sinBloq
          ORDER BY ch.ultimo_msg DESC
          LIMIT 50"
     );
@@ -784,8 +835,10 @@ if ($action === 'mensajes') {
 // abrir_chat — devuelve el chat con alguien, creándolo si no existe
 // ══════════════════════════════════════════════════════════════════
 if ($action === 'abrir_chat') {
+    exigirComunidad($mysqli2, $miCi);
     $otro = normalizarCi(inp('ci'));
     if ($otro === '' || $otro === $miCi) respErr('Cédula inválida');
+    if (in_array($otro, bloqueosDe($mysqli2, $miCi), true)) respErr('No podés chatear con este jugador.', 403);
 
     $st = $mysqli2->prepare("SELECT ci FROM _p_usuarios WHERE ci = ? LIMIT 1");
     $st->bind_param('s', $otro);
@@ -812,10 +865,13 @@ if ($action === 'abrir_chat') {
 }
 
 if ($action === 'enviar') {
+    exigirComunidad($mysqli2, $miCi);
     $idChat = inpInt('chat');
     $texto = textoValido();
     if (!$idChat) respErr('Falta chat');
-    chatMio($mysqli2, $idChat, $miCi);
+    $chat = chatMio($mysqli2, $idChat, $miCi);
+    $otro = $chat['ci_a'] === $miCi ? (string)$chat['ci_b'] : (string)$chat['ci_a'];
+    if (in_array($otro, bloqueosDe($mysqli2, $miCi), true)) respErr('No podés chatear con este jugador.', 403);
 
     $st = $mysqli2->prepare("INSERT INTO _app_mensajes (id_chat, ci_autor, texto) VALUES (?, ?, ?)");
     $st->bind_param('iss', $idChat, $miCi, $texto);
@@ -829,7 +885,137 @@ if ($action === 'enviar') {
     $st->close();
 
     guardarMenciones($mysqli2, 'mensaje', $id, $texto);
+    notificar($mysqli2, $otro, 'mensaje', 'Te escribieron por chat', mb_substr($texto, 0, 120), "/chat/$idChat");
     resp(['success' => true, 'id' => $id]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// COMUNIDAD — normas, bloqueos, denuncias (18-ago-2026)
+// ══════════════════════════════════════════════════════════════════
+
+/** Estado del jugador en la comunidad: lo pide la app al entrar a Comunidad. */
+if ($action === 'estado_comunidad') {
+    $j = jugadorApp($mysqli2, $miCi);
+    $susp = suspension($j);
+    resp([
+        'success'           => true,
+        'terminosVersion'   => TERMINOS_VERSION,
+        'terminosAceptados' => terminosAceptados($j),
+        'suspendidoHasta'   => $susp['hasta'] ?? null,
+        'suspendidoMotivo'  => $susp['motivo'] ?? null,
+        'bloqueados'        => bloqueadosPor($mysqli2, $miCi),
+    ]);
+}
+
+if ($action === 'aceptar_terminos') {
+    $v = TERMINOS_VERSION;
+    $st = $mysqli2->prepare("INSERT INTO _app_jugadores (ci, terminos_version, terminos_en) VALUES (?, ?, NOW())
+                             ON DUPLICATE KEY UPDATE terminos_version = VALUES(terminos_version), terminos_en = NOW()");
+    $st->bind_param('ss', $miCi, $v); $st->execute(); $st->close();
+    resp(['success' => true, 'terminosVersion' => $v]);
+}
+
+if ($action === 'bloquear' || $action === 'desbloquear') {
+    $otro = normalizarCi(inp('ci'));
+    if ($otro === '' || $otro === $miCi) respErr('Cédula inválida');
+    if ($action === 'bloquear') {
+        $st = $mysqli2->prepare("INSERT IGNORE INTO _app_bloqueos (ci, ci_bloqueado) VALUES (?, ?)");
+    } else {
+        $st = $mysqli2->prepare("DELETE FROM _app_bloqueos WHERE ci = ? AND ci_bloqueado = ?");
+    }
+    $st->bind_param('ss', $miCi, $otro); $st->execute(); $st->close();
+    resp(['success' => true, 'bloqueados' => bloqueadosPor($mysqli2, $miCi)]);
+}
+
+/**
+ * denunciar — {tipo: post|comentario|mensaje|dupla|jugador, id?, ci?, motivo, detalle?}
+ * Guarda copia del texto y avisa al moderador (mail + Telegram); el admin lo lista.
+ */
+if ($action === 'denunciar') {
+    $tipo = inp('tipo');
+    $motivo = mb_substr(inp('motivo'), 0, 40);
+    $detalle = mb_substr(inp('detalle'), 0, 500);
+    $refId = inpInt('id', 0) ?: null;
+    $ciDen = normalizarCi(inp('ci')) ?: null;
+    if (!in_array($tipo, ['post', 'comentario', 'mensaje', 'dupla', 'jugador'], true)) respErr('Tipo inválido');
+    if ($motivo === '') respErr('Falta el motivo');
+    if ($tipo !== 'jugador' && !$refId) respErr('Falta el id del contenido');
+
+    // Copia del contenido y autor, según el tipo.
+    $texto = null;
+    $q = ['post' => "SELECT texto, ci_autor FROM _app_posts WHERE id = ?",
+          'comentario' => "SELECT texto, ci_autor FROM _app_comentarios WHERE id = ?",
+          'mensaje' => "SELECT texto, ci_autor FROM _app_mensajes WHERE id = ?",
+          'dupla' => "SELECT texto, ci_autor FROM _app_busca_dupla WHERE id = ?"][$tipo] ?? null;
+    if ($q) {
+        $st = $mysqli2->prepare($q); $st->bind_param('i', $refId); $st->execute();
+        $row = $st->get_result()->fetch_assoc(); $st->close();
+        if (!$row) respErr('El contenido no existe', 404);
+        $texto = $row['texto']; $ciDen = (string)$row['ci_autor'];
+    }
+    if (!$ciDen) respErr('Falta el jugador denunciado');
+
+    $st = $mysqli2->prepare("INSERT INTO _app_denuncias (ci_denunciante, tipo, ref_id, ci_denunciado, motivo, detalle, texto) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $st->bind_param('ssissss', $miCi, $tipo, $refId, $ciDen, $motivo, $detalle, $texto);
+    $st->execute(); $idDen = (int)$mysqli2->insert_id; $st->close();
+
+    $st = $mysqli2->prepare("SELECT CONCAT(nombre, ' ', apellido) n FROM _p_usuarios WHERE ci = ? LIMIT 1");
+    $st->bind_param('s', $ciDen); $st->execute(); $nd = $st->get_result()->fetch_assoc()['n'] ?? $ciDen; $st->close();
+    avisarModerador("Denuncia #$idDen ($tipo · $motivo)", "Denunciado: $nd (CI $ciDen)\nDenunciante: " . nombreJugador($yo) . " (CI $miCi)\n" . ($detalle ? "Detalle: $detalle\n" : '') . ($texto ? "Texto: " . mb_substr($texto, 0, 300) : ''));
+    resp(['success' => true, 'id' => $idDen]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NOTIFICACIONES in-app (campana). El push de fase 3 sale de la misma tabla.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'notificaciones') {
+    $st = $mysqli2->prepare("SELECT id, tipo, titulo, cuerpo, destino, creado, leida FROM _app_notificaciones WHERE ci = ? ORDER BY creado DESC LIMIT 100");
+    $st->bind_param('s', $miCi); $st->execute();
+    $r = $st->get_result(); $out = []; $sinLeer = 0;
+    while ($n = $r->fetch_assoc()) {
+        if (!$n['leida']) $sinLeer++;
+        $out[] = ['id' => (string)$n['id'], 'tipo' => $n['tipo'], 'titulo' => $n['titulo'], 'cuerpo' => $n['cuerpo'] ?? '', 'destino' => $n['destino'], 'fecha' => $n['creado'], 'leida' => !empty($n['leida'])];
+    }
+    $st->close();
+    resp(['success' => true, 'notificaciones' => $out, 'sinLeer' => $sinLeer]);
+}
+
+if ($action === 'marcar_leidas') {
+    $st = $mysqli2->prepare("UPDATE _app_notificaciones SET leida = NOW() WHERE ci = ? AND leida IS NULL");
+    $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// eliminar_cuenta — POST {pase}. Exigido por Google Play y App Store.
+// Anonimiza el padrón (el CI queda para el historial de resultados, que es de
+// las duplas y del torneo, no del jugador) y borra todo lo de la app.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'eliminar_cuenta') {
+    $pase = trim((string)((json_decode(file_get_contents('php://input'), true) ?: [])['pase'] ?? ''));
+    if ($pase === '') respErr('Ingresá tu contraseña para confirmar');
+    $st = $mysqli2->prepare("SELECT pase, imagen_usuario FROM _p_usuarios WHERE TRIM(ci) = ? LIMIT 1");
+    $st->bind_param('s', $miCi); $st->execute(); $u = $st->get_result()->fetch_assoc(); $st->close();
+    if (!$u) respErr('Usuario no encontrado', 404);
+    if (trim((string)$u['pase']) !== $pase) respErr('La contraseña es incorrecta');
+
+    // Contenido de la app del jugador
+    foreach (['_app_posts' => 'ci_autor', '_app_comentarios' => 'ci_autor', '_app_busca_dupla' => 'ci_autor', '_app_likes' => 'ci',
+              '_app_menciones' => 'ci', '_app_notificaciones' => 'ci', '_app_dispositivos' => 'ci', '_app_bloqueos' => 'ci'] as $tabla => $col) {
+        $st = $mysqli2->prepare("DELETE FROM `$tabla` WHERE `$col` = ?"); $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    }
+    // Mensajes: se anonimizan (el otro conserva su lado de la conversación).
+    $st = $mysqli2->prepare("UPDATE _app_mensajes SET texto = '[mensaje de una cuenta eliminada]' WHERE ci_autor = ?"); $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    // Padrón: datos personales fuera, CI y nombre corto para el historial de resultados.
+    $emailAnon = "eliminado+{$miCi}@bt.com.py"; $paseAnon = bin2hex(random_bytes(12));
+    $st = $mysqli2->prepare("UPDATE _p_usuarios SET email = ?, pase = ?, cel = '', tel = '', whatsapp = '', imagen_usuario = '', fecha_nacimiento = NULL, estado = 'inactivo' WHERE TRIM(ci) = ?");
+    $st->bind_param('sss', $emailAnon, $paseAnon, $miCi); $st->execute(); $st->close();
+    if (!empty($u['imagen_usuario']) && str_contains($u['imagen_usuario'], '/')) @unlink(rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__, '/') . '/' . ltrim($u['imagen_usuario'], '/'));
+    // Sesiones del sitio y de la app
+    $st = $mysqli2->prepare("DELETE FROM _sesion_usuario WHERE ci = ?"); $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    $st = $mysqli2->prepare("INSERT INTO _app_jugadores (ci, eliminado_en) VALUES (?, NOW()) ON DUPLICATE KEY UPDATE eliminado_en = NOW()"); $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    avisarModerador("Cuenta eliminada (CI $miCi)", "El jugador eliminó su cuenta desde la app.");
+    resp(['success' => true]);
 }
 
 respErr('Acción no disponible', 404);
