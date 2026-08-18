@@ -89,7 +89,7 @@ function prefijo_partido(string $nombreGrupo, int $nro): string {
 }
 
 // ── Whitelist: cualquier cosa fuera de acá se rechaza ────────────
-const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'ranking_interclubes', 'circuitos', 'estadisticas', 'buscar_jugador', 'en_juego'];
+const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'ranking_interclubes', 'circuitos', 'estadisticas', 'jugador', 'buscar_jugador', 'en_juego'];
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
@@ -1139,6 +1139,163 @@ if ($action === 'estadisticas') {
     $stT->close();
     usort($out, fn($a, $b) => $b['pg'] <=> $a['pg']);
     resp(['success' => true, 'jugadores' => $out]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// jugador — ficha PÚBLICA del jugador, MISMA lógica que jugador.inc.php
+// (jugador.php?ci=): historial de inscripciones agrupado por evento con
+// compañero/a, PJ/PG/PP por sets, trofeos por puntos de _ranking contra la
+// config de etiquetas (8/12 campeón, 6/13 finalista), y por categoría los
+// torneos + efectividad. Sin datos de contacto: es público, como la web.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'jugador') {
+    $ci = preg_replace('/\D/', '', strGet('ci'));
+    if ($ci === '') respErr('Falta ci');
+
+    $st = $mysqli2->prepare("SELECT nombre, apellido, imagen_usuario, ciudad FROM _p_usuarios WHERE ci = ? LIMIT 1");
+    $st->bind_param('s', $ci);
+    $st->execute();
+    $u = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$u) respErr('Jugador no encontrado', 404);
+
+    // Foto: mismas dos formas que guarda la base (ver bt_app_auth.inc.php::fotoUrl).
+    $img = trim((string)($u['imagen_usuario'] ?? ''));
+    $foto = null;
+    if ($img !== '' && $img !== 'default.jpg') {
+        $rel = str_contains($img, '/') ? ltrim($img, '/') : 'img/usuario/' . $img;
+        $abs = rtrim($_SERVER['DOCUMENT_ROOT'] ?? __DIR__, '/') . '/' . $rel;
+        if (is_file($abs)) $foto = 'https://bt.com.py/' . $rel . '?v=' . filemtime($abs);
+    }
+
+    $catNombre = [];
+    $r = $mysqli2->query("SELECT id, categoria FROM _p_categorias");
+    if ($r) while ($c = $r->fetch_assoc()) $catNombre[(int)$c['id']] = $c['categoria'];
+
+    // Historial (LIMIT 50, como la web), agrupado por evento.
+    $st = $mysqli2->prepare(
+        "SELECT i.id_evento, i.id_categoria, i.ci_dupla, e.evento AS nombre_evento,
+                DATE_FORMAT(e.fecha, '%d-%m-%Y') AS fecha_evento, e.fecha AS fecha_iso,
+                d.nombre AS d_nombre, d.apellido AS d_apellido, d.ci AS d_ci
+           FROM _p_incripciones i
+           LEFT JOIN _p_eventos e ON e.id = i.id_evento
+           LEFT JOIN _p_usuarios d ON d.ci = i.ci_dupla
+          WHERE i.ci = ?
+          ORDER BY i.fecha_inscripcion DESC
+          LIMIT 50");
+    $st->bind_param('s', $ci);
+    $st->execute();
+    $rs = $st->get_result();
+    $historial = [];   // id_evento => [...]
+    while ($h = $rs->fetch_assoc()) {
+        $idEv = (int)$h['id_evento'];
+        $idCat = (int)$h['id_categoria'];
+        if (!isset($historial[$idEv])) {
+            $historial[$idEv] = [
+                'eventoId' => $idEv,
+                'evento'   => mb_strtoupper($h['nombre_evento'] ?: "Torneo #$idEv", 'UTF-8'),
+                'fecha'    => $h['fecha_evento'] ?? '',
+                'items'    => [],
+            ];
+        }
+        $historial[$idEv]['items'][] = [
+            'categoriaId' => $idCat,
+            'categoria'   => $catNombre[$idCat] ?? "Cat. $idCat",
+            'companero'   => $h['d_ci'] ? ['ci' => (string)$h['d_ci'], 'nombre' => mb_strtoupper(trim(($h['d_nombre'] ?? '') . ' ' . ($h['d_apellido'] ?? '')), 'UTF-8')] : null,
+        ];
+    }
+    $st->close();
+
+    // Partidos por sets (+ acumulado por categoría).
+    $pj = $pg = $pp = 0; $statsCat = [];
+    $st = $mysqli2->prepare(
+        "SELECT ci1_a, ci1_b, ci2_a, ci2_b, categoria AS id_cat,
+                rusultado_equipo1 AS s1e1, resultado_equipo2 AS s1e2,
+                resultado2_equipo1 AS s2e1, resultado2_equipo2 AS s2e2,
+                resultado3_equipo1 AS s3e1, resultado3_equipo2 AS s3e2
+           FROM _todosvstodos
+          WHERE (ci1_a = ? OR ci1_b = ? OR ci2_a = ? OR ci2_b = ?)
+            AND (rusultado_equipo1 > 0 OR resultado_equipo2 > 0 OR resultado2_equipo1 > 0
+                 OR resultado2_equipo2 > 0 OR resultado3_equipo1 > 0 OR resultado3_equipo2 > 0)");
+    $st->bind_param('ssss', $ci, $ci, $ci, $ci);
+    $st->execute();
+    $rs = $st->get_result();
+    while ($row = $rs->fetch_assoc()) {
+        $enE1 = ((int)$row['ci1_a'] === (int)$ci || (int)$row['ci1_b'] === (int)$ci);
+        $se1 = $se2 = 0;
+        foreach ([['s1e1', 's1e2'], ['s2e1', 's2e2'], ['s3e1', 's3e2']] as $par) {
+            $a = (int)$row[$par[0]]; $b = (int)$row[$par[1]];
+            if ($a === 0 && $b === 0) continue;
+            if ($a > $b) $se1++; else $se2++;
+        }
+        if ($se1 === 0 && $se2 === 0) continue;
+        $pj++;
+        $gano = $se1 > $se2;
+        $ganado = ($enE1 && $gano) || (!$enE1 && !$gano);
+        if ($ganado) $pg++; else $pp++;
+        $idC = (int)$row['id_cat'];
+        if (!isset($statsCat[$idC])) $statsCat[$idC] = ['pj' => 0, 'pg' => 0];
+        $statsCat[$idC]['pj']++;
+        if ($ganado) $statsCat[$idC]['pg']++;
+    }
+    $st->close();
+
+    // Trofeos: puntos del jugador en _ranking == puntos de campeón/finalista configurados
+    // por evento (_relacion_etiquetas_eventos) o por defecto (_ranking_config).
+    $cfg = []; $def = [];
+    $r = $mysqli2->query("SELECT id_evento, id_categoria, id_etiqueta, puntos FROM _relacion_etiquetas_eventos WHERE id_etiqueta IN (6, 8, 12, 13)");
+    if ($r) while ($c = $r->fetch_assoc()) {
+        $k = in_array((int)$c['id_etiqueta'], [8, 12], true) ? 'cc' : 'vc';
+        $cfg[(int)$c['id_evento']][(int)$c['id_categoria']][$k] = (int)$c['puntos'];
+    }
+    $r = $mysqli2->query("SELECT id_categoria, id_etiqueta, puntos FROM _ranking_config WHERE id_etiqueta IN (6, 8, 12, 13)");
+    if ($r) while ($c = $r->fetch_assoc()) {
+        $k = in_array((int)$c['id_etiqueta'], [8, 12], true) ? 'cc' : 'vc';
+        $def[(int)$c['id_categoria']][$k] = (int)$c['puntos'];
+    }
+    $campeon = $finalista = 0;
+    $st = $mysqli2->prepare("SELECT evento, categoria, puntos FROM _ranking WHERE ci = ?");
+    $st->bind_param('s', $ci);
+    $st->execute();
+    $rs = $st->get_result();
+    while ($rk = $rs->fetch_assoc()) {
+        $ev = (int)$rk['evento']; $cat = (int)$rk['categoria']; $pts = (int)$rk['puntos'];
+        $cc = $cfg[$ev][$cat]['cc'] ?? $def[$cat]['cc'] ?? null;
+        $vc = $cfg[$ev][$cat]['vc'] ?? $def[$cat]['vc'] ?? null;
+        if ($cc !== null && $pts === $cc) $campeon++;
+        elseif ($vc !== null && $pts === $vc) $finalista++;
+    }
+    $st->close();
+
+    // Por categoría: torneos del historial + PJ/PG de esa categoría.
+    $porCat = [];
+    foreach ($historial as $ev) {
+        foreach ($ev['items'] as $it) {
+            $ic = $it['categoriaId'];
+            if (!isset($porCat[$ic])) $porCat[$ic] = ['categoriaId' => $ic, 'categoria' => $it['categoria'], 'pj' => $statsCat[$ic]['pj'] ?? 0, 'pg' => $statsCat[$ic]['pg'] ?? 0, 'torneos' => []];
+            $ya = false;
+            foreach ($porCat[$ic]['torneos'] as $tt) if ($tt['eventoId'] === $ev['eventoId']) { $ya = true; break; }
+            if (!$ya) $porCat[$ic]['torneos'][] = ['eventoId' => $ev['eventoId'], 'evento' => $ev['evento'], 'fecha' => $ev['fecha']];
+        }
+    }
+    usort($porCat, fn($a, $b) => count($b['torneos']) <=> count($a['torneos']));
+    foreach ($porCat as &$pc) $pc['efectividad'] = $pc['pj'] > 0 ? round($pc['pg'] * 100 / $pc['pj']) : null;
+    unset($pc);
+
+    resp([
+        'success' => true,
+        'jugador' => [
+            'ci'       => $ci,
+            'nombre'   => mb_strtoupper(trim($u['nombre'] ?? ''), 'UTF-8'),
+            'apellido' => mb_strtoupper(trim($u['apellido'] ?? ''), 'UTF-8'),
+            'ciudad'   => $u['ciudad'] ?? '',
+            'foto'     => $foto,
+        ],
+        'stats'      => ['torneos' => count($historial), 'pj' => $pj, 'pg' => $pg, 'pp' => $pp, 'efectividad' => $pj > 0 ? round($pg * 100 / $pj, 1) : 0],
+        'trofeos'    => ['campeon' => $campeon, 'finalista' => $finalista],
+        'historial'  => array_values($historial),
+        'porCategoria' => $porCat,
+    ]);
 }
 
 // ══════════════════════════════════════════════════════════════════
