@@ -404,31 +404,39 @@ if ($action === 'resultados') {
         $filas[] = $row;
     }
 
-    $nombres = [];
+    $nombres = []; $partes = [];
     if ($cis) {
         $lista = implode(',', array_map(fn($ci) => "'" . $mysqli2->real_escape_string($ci) . "'", array_keys($cis)));
         $rn = $mysqli2->query("SELECT ci, nombre, apellido FROM _p_usuarios WHERE ci IN ($lista)");
         if ($rn) while ($u = $rn->fetch_assoc()) {
             $nombres[(string)$u['ci']] = trim($u['nombre'] . ' ' . $u['apellido']);
+            $partes[(string)$u['ci']]  = ['nombre' => trim((string)$u['nombre']), 'apellido' => trim((string)$u['apellido'])];
         }
     }
     $nom = fn($ci) => $nombres[(string)$ci] ?? '';
+    $jug = fn($ci) => $partes[(string)$ci] ?? null;
 
     // Clasificación: ya está calculada en `tabla_auxiliar` (la escribe
     // logica/calcular_clasificacion.php desde el admin). Acá SÓLO se lee.
     $tablas = [];
-    $rt = $mysqli2->query("SELECT id_grupo, ci1_a, ci1_b, jugados, sg, puntos, la_posicion
+    // Mismas columnas que el modal "GRUPO n — Clasificación" de la web
+    // (logica/todos.vs.todos.php ~1881): SG = saldo `sg` con `g+` en superíndice,
+    // PG = `ganados`, PTS = `puntos`.
+    $rt = $mysqli2->query("SELECT id_grupo, ci1_a, ci1_b, jugados, ganados, `g+` AS gmas, sg, puntos, la_posicion
                            FROM tabla_auxiliar
                            WHERE id_evento = $idEvento AND id_categoria = $idCat
                            ORDER BY id_grupo ASC, la_posicion ASC");
     if ($rt) while ($tr = $rt->fetch_assoc()) {
         $g = (int)$tr['id_grupo'];
         $tablas[$g][] = [
-            'pareja'   => trim($nom($tr['ci1_a']) . ' / ' . $nom($tr['ci1_b']), ' /'),
-            'pj'       => (int)$tr['jugados'],
-            'sg'       => (int)$tr['sg'],
-            'pts'      => (int)$tr['puntos'],
-            'posicion' => (int)$tr['la_posicion'],
+            'pareja'    => trim($nom($tr['ci1_a']) . ' / ' . $nom($tr['ci1_b']), ' /'),
+            'jugadores' => array_values(array_filter([$jug($tr['ci1_a']), $jug($tr['ci1_b'])])),
+            'pj'        => (int)$tr['jugados'],
+            'pg'        => (int)$tr['ganados'],
+            'gMas'      => (int)$tr['gmas'],
+            'sg'        => (int)$tr['sg'],
+            'pts'       => (float)$tr['puntos'],
+            'posicion'  => (int)$tr['la_posicion'],
         ];
     }
 
