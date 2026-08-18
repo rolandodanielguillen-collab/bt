@@ -89,7 +89,7 @@ function prefijo_partido(string $nombreGrupo, int $nro): string {
 }
 
 // ── Whitelist: cualquier cosa fuera de acá se rechaza ────────────
-const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'buscar_jugador', 'en_juego'];
+const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'ranking_interclubes', 'buscar_jugador', 'en_juego'];
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
@@ -862,11 +862,202 @@ if ($action === 'ranking') {
         ];
     }
 
-    $json = json_encode(['success' => true, 'categorias' => $categorias], JSON_UNESCAPED_UNICODE);
+    // Mismo orden de tarjetas que la web: primera aparición de la categoría en
+    // _ranking (la web itera las filas tal cual vienen; equivale a MIN(id)).
+    $ordenCat = [];
+    $rOrd = $mysqli2->query("SELECT categoria, MIN(id) m FROM _ranking WHERE circuito = $circ AND puntos > 0 GROUP BY categoria ORDER BY m");
+    if ($rOrd) while ($o = $rOrd->fetch_assoc()) $ordenCat[(int)$o['categoria']] = count($ordenCat);
+    usort($categorias, fn($a, $b) => ($ordenCat[$a['id']] ?? PHP_INT_MAX) <=> ($ordenCat[$b['id']] ?? PHP_INT_MAX));
+
+    // TOP 10 — PUNTOS GENERALES, como en la web: por CI se suma el total de todas
+    // las categorías; primer nombre + primer apellido en mayúsculas.
+    $top10 = [];
+    foreach ($categorias as $cat) {
+        foreach ($cat['jugadores'] as $j) {
+            $ciT = $j['ci'];
+            if (!isset($top10[$ciT])) {
+                $top10[$ciT] = [
+                    'ci'       => $ciT,
+                    'nombre'   => mb_strtoupper(explode(' ', trim($j['nombre']))[0] ?? '', 'UTF-8'),
+                    'apellido' => mb_strtoupper(explode(' ', trim($j['apellido']))[0] ?? '', 'UTF-8'),
+                    'total'    => 0,
+                ];
+            }
+            $top10[$ciT]['total'] += $j['total'];
+        }
+    }
+    usort($top10, fn($a, $b) => $b['total'] <=> $a['total']);
+    $top10 = array_slice(array_values($top10), 0, 10);
+
+    $json = json_encode(['success' => true, 'categorias' => $categorias, 'top10' => $top10], JSON_UNESCAPED_UNICODE);
     if ($q === '') @file_put_contents($cacheFile, $json);
     header('X-BT-Cache: miss');
     echo $json;
     exit;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ranking_interclubes — ranking de CLUBES del circuito, MISMA lógica que
+// logica/mostrar-ranking-interclubes.php (10-ago): cada categoría reparte
+// puntos por posición final, el club suma sus categorías, el circuito acumula
+// los eventos interclubes CULMINADOS. Cálculo en vivo (6 queries).
+//
+// ⚠️ DEUDA: la agregación está duplicada con la página web (~70 líneas). Las
+// funciones ic_* sí son compartidas (interclubes.functions.php). El arreglo
+// real es mover el bloque a una función ahí y que la página la llame.
+// Params: circuito (id, default 1) · ev (id de una fecha; 0 = acumulado).
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'ranking_interclubes') {
+    $circ  = intGet('circuito', 1);
+    $evSel = intGet('ev', 0);
+    $fnIc = file_exists(__DIR__ . '/interclubes.functions.php') ? __DIR__ . '/interclubes.functions.php' : $_SERVER['DOCUMENT_ROOT'] . '/interclubes.functions.php';
+    if (!file_exists($fnIc)) respErr('Interclubes no disponible', 500);
+    require_once $fnIc;
+
+    $txt = function ($v): string {
+        $v = (string)$v;
+        if (!mb_check_encoding($v, 'UTF-8')) $v = mb_convert_encoding($v, 'UTF-8', 'ISO-8859-1');
+        return mb_strtoupper(trim($v), 'UTF-8');
+    };
+
+    // Circuito: fecha_fin cargada y pasada = cerrado (campeón); si no, líder.
+    $rowC = $mysqli2->query("SELECT fecha_fin FROM _circuitos WHERE id = $circ")->fetch_assoc();
+    $finC = $rowC['fecha_fin'] ?? null;
+    $circuitoCerrado = $finC && $finC !== '0000-00-00' && date('Y-m-d') >= $finC;
+
+    $eventosIC = [];   // id => nombre (sólo culminados, orden cronológico)
+    $rEv = $mysqli2->query("SELECT id, evento FROM _p_eventos
+        WHERE id_circuito = $circ AND id_tipo_evento = 5 AND estado = 'culminado'
+        ORDER BY fecha ASC, id ASC");
+    if ($rEv) while ($r = $rEv->fetch_assoc()) $eventosIC[(int)$r['id']] = $r['evento'];
+
+    $fechasPendientes = (int)($mysqli2->query("SELECT COUNT(*) c FROM _p_eventos
+        WHERE id_circuito = $circ AND id_tipo_evento = 5 AND estado IN ('activo','registro')")->fetch_assoc()['c'] ?? 0);
+    if ($fechasPendientes > 0) $circuitoCerrado = false;
+
+    if (!isset($eventosIC[$evSel])) $evSel = 0;
+    $eventosVer = $evSel ? [$evSel => $eventosIC[$evSel]] : $eventosIC;
+
+    $ranking = []; $catNombre = []; $catsEnCurso = []; $escalaEv = [];
+    $etiquetaPos = [1 => 'Campeón', 2 => 'Finalista', 3 => 'Tercer puesto', 4 => 'Cuarto puesto', 0 => 'Participación'];
+
+    if ($eventosVer) {
+        $ids = implode(',', array_map('intval', array_keys($eventosVer)));
+
+        $clubes = [];
+        $res = $mysqli2->query("SELECT id, id_evento, nombre FROM _p_clubes WHERE id_evento IN ($ids)");
+        while ($r = $res->fetch_assoc()) $clubes[(int)$r['id_evento']][(int)$r['id']] = $r['nombre'];
+
+        $sorteo = [];
+        $res = $mysqli2->query("SELECT id_evento, id_categoria, id_club FROM _ic_sorteo WHERE id_evento IN ($ids) ORDER BY posicion ASC");
+        while ($r = $res->fetch_assoc()) {
+            $ev = (int)$r['id_evento']; $cl = (int)$r['id_club'];
+            if (isset($clubes[$ev][$cl])) $sorteo[$ev][(int)$r['id_categoria']][$cl] = $clubes[$ev][$cl];
+        }
+
+        $partidos = [];
+        $res = $mysqli2->query("SELECT * FROM _ic_partidos WHERE id_evento IN ($ids)");
+        while ($r = $res->fetch_assoc()) $partidos[(int)$r['id_evento']][(int)$r['id_categoria']][] = $r;
+
+        $llaves = [];
+        $res = $mysqli2->query("SELECT id_evento, id_categoria, fase, clubA, clubB FROM _ic_llaves WHERE id_evento IN ($ids)");
+        while ($r = $res->fetch_assoc()) $llaves[(int)$r['id_evento']][(int)$r['id_categoria']][$r['fase']] = $r;
+
+        $res = $mysqli2->query("SELECT id, categoria FROM _p_categorias");
+        while ($r = $res->fetch_assoc()) $catNombre[(int)$r['id']] = $r['categoria'];
+
+        $matriz = ic_puntos_matriz($mysqli2, array_keys($eventosVer));
+
+        foreach ($eventosVer as $idEv => $nombreEv) {
+            $catsEnCurso[$idEv] = 0;
+            $catsEv = $sorteo[$idEv] ?? [];
+            uksort($catsEv, fn($a, $b) => strcmp($catNombre[$a] ?? '', $catNombre[$b] ?? ''));
+            $catRef = array_key_first($catsEv);
+            if ($catRef !== null)
+                foreach ([1, 2, 3, 4, 0] as $p) $escalaEv[$idEv][$p] = ic_puntos_pos($matriz, $idEv, $catRef, $p);
+            foreach ($catsEv as $idCat => $clubesCat) {
+                $posiciones = ic_posiciones_categoria($clubesCat, $llaves[$idEv][$idCat] ?? [], $partidos[$idEv][$idCat] ?? []);
+                if (!$posiciones) { $catsEnCurso[$idEv]++; continue; }
+                foreach ($posiciones as $idClub => $pos) {
+                    $nombreClub = $clubesCat[$idClub] ?? '';
+                    if ($nombreClub === '') continue;
+                    $k = ic_clave_club($nombreClub);
+                    if (!isset($ranking[$k]))
+                        $ranking[$k] = ['nombre' => $nombreClub, 'total' => 0, 'conteo' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 0 => 0], 'eventos' => []];
+                    $pts = ic_puntos_pos($matriz, $idEv, $idCat, $pos);
+                    $ranking[$k]['total'] += $pts;
+                    $ranking[$k]['conteo'][$pos]++;
+                    if (!isset($ranking[$k]['eventos'][$idEv]))
+                        $ranking[$k]['eventos'][$idEv] = ['pts' => 0, 'conteo' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 0 => 0], 'cats' => []];
+                    $ranking[$k]['eventos'][$idEv]['pts'] += $pts;
+                    $ranking[$k]['eventos'][$idEv]['conteo'][$pos]++;
+                    $ranking[$k]['eventos'][$idEv]['cats'][] = ['cat' => $txt($catNombre[$idCat] ?? "Cat. $idCat"), 'pos' => $pos, 'label' => $etiquetaPos[$pos], 'pts' => $pts];
+                }
+            }
+        }
+    }
+
+    // Orden: puntos → títulos → finales → terceros → cuartos → nombre
+    $clave = fn($c) => [$c['total'], $c['conteo'][1], $c['conteo'][2], $c['conteo'][3], $c['conteo'][4]];
+    uasort($ranking, function ($a, $b) use ($clave) {
+        $cmp = $clave($b) <=> $clave($a);
+        return $cmp !== 0 ? $cmp : strcmp($a['nombre'], $b['nombre']);
+    });
+    $ranking = array_values($ranking);
+
+    $campeones = [];
+    if ($ranking) {
+        $campeones[] = $ranking[0];
+        for ($i = 1; $i < count($ranking); $i++) {
+            if ($clave($ranking[$i]) !== $clave($ranking[0])) break;
+            $campeones[] = $ranking[$i];
+        }
+    }
+
+    // Campeón de cada fecha (mismo desempate, dentro de la fecha)
+    $campeonEvento = [];
+    foreach (array_keys($eventosVer) as $idEv) {
+        $mejor = null; $nombres = [];
+        foreach ($ranking as $c) {
+            if (!isset($c['eventos'][$idEv])) continue;
+            $e = $c['eventos'][$idEv];
+            $k = [$e['pts'], $e['conteo'][1], $e['conteo'][2], $e['conteo'][3], $e['conteo'][4]];
+            if ($mejor === null || $k > $mejor) { $mejor = $k; $nombres = [$txt($c['nombre'])]; }
+            elseif ($k === $mejor) $nombres[] = $txt($c['nombre']);
+        }
+        if ($nombres) $campeonEvento[] = ['evento' => $txt($eventosVer[$idEv]), 'clubes' => $nombres];
+    }
+
+    $conteoOut = fn($c) => ['participacion' => $c[0], 'cuarto' => $c[4], 'tercero' => $c[3], 'finalista' => $c[2], 'campeon' => $c[1]];
+    $clubesOut = [];
+    foreach ($ranking as $i => $c) {
+        $evsOut = [];
+        foreach ($c['eventos'] as $idEv => $e)
+            $evsOut[] = ['id' => $idEv, 'nombre' => $txt($eventosIC[$idEv] ?? ''), 'pts' => $e['pts'], 'cats' => $e['cats'], 'enCurso' => $catsEnCurso[$idEv] ?? 0];
+        $clubesOut[] = ['pos' => $i + 1, 'club' => $txt($c['nombre']), 'total' => $c['total'], 'conteo' => $conteoOut($c['conteo']), 'eventos' => $evsOut];
+    }
+
+    $escalasDistintas = count(array_unique(array_map('json_encode', $escalaEv))) > 1;
+    $esc1 = $escalaEv ? reset($escalaEv) : IC_PUNTOS_POSICION;
+
+    resp([
+        'success'          => true,
+        'circuitoCerrado'  => $circuitoCerrado,
+        'fechasPendientes' => $fechasPendientes,
+        'eventos'          => array_map(fn($id, $n) => ['id' => $id, 'nombre' => $txt($n)], array_keys($eventosIC), $eventosIC),
+        'evSel'            => $evSel,
+        'hero'             => $campeones ? [
+            'tipo'    => $evSel ? 'campeonFecha' : ($circuitoCerrado ? 'campeonCircuito' : 'lider'),
+            'clubes'  => array_map(fn($c) => $txt($c['nombre']), $campeones),
+            'pts'     => $campeones[0]['total'],
+            'titulos' => $campeones[0]['conteo'][1],
+            'fechas'  => count($eventosVer),
+            'empate'  => count($campeones) > 1,
+        ] : null,
+        'campeonesFecha'   => $campeonEvento,
+        'clubes'           => $clubesOut,
+        'escala'           => $escalasDistintas ? null : $conteoOut($esc1),
+    ]);
 }
 
 // ══════════════════════════════════════════════════════════════════
