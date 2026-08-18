@@ -89,7 +89,7 @@ function prefijo_partido(string $nombreGrupo, int $nro): string {
 }
 
 // ── Whitelist: cualquier cosa fuera de acá se rechaza ────────────
-const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'ranking', 'buscar_jugador', 'en_juego'];
+const ACCIONES = ['eventos', 'evento', 'categorias', 'parejas', 'resultados', 'resultados_ic', 'ranking', 'buscar_jugador', 'en_juego'];
 
 $action = strGet('action');
 if (!$action) respErr('Falta parámetro action');
@@ -570,6 +570,173 @@ if ($action === 'resultados') {
         'grupos'  => array_values($grupos),
         'fases'   => $listaFases,
     ]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// resultados_ic — fixture de un evento INTERCLUBES (id_tipo_evento 5)
+// Misma fuente y mismo criterio que logica/interclubes.llaves.inc.php:
+// categorías con sorteo, grupos de clubes, series club vs club (partidos
+// dupla vs dupla + desempate), posiciones (ic_posiciones) y llaves.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'resultados_ic') {
+    $idEvento = intGet('evento');
+    if (!$idEvento) respErr('Falta evento');
+    $fnIc = file_exists(__DIR__ . '/interclubes.functions.php') ? __DIR__ . '/interclubes.functions.php' : $_SERVER['DOCUMENT_ROOT'] . '/interclubes.functions.php';
+    if (!file_exists($fnIc)) respErr('Interclubes no disponible', 500);
+    require_once $fnIc;
+
+    // Categorías con sorteo, visibles en llaves (igual que la web).
+    $st = $mysqli2->prepare(
+        "SELECT s.id_categoria, COALESCE(cat.categoria,'?') AS categoria
+           FROM _ic_sorteo s LEFT JOIN _p_categorias cat ON cat.id = s.id_categoria
+           JOIN _relacion_evento_categoria rec
+             ON rec.id_evento = s.id_evento AND rec.id_categoria = s.id_categoria
+            AND rec.estado = 'activo' AND rec.visualizar_en_llaves = 'si'
+          WHERE s.id_evento = ? GROUP BY s.id_categoria ORDER BY cat.categoria ASC");
+    $st->bind_param('i', $idEvento);
+    $st->execute();
+    $rs = $st->get_result();
+    $cats = [];
+    while ($r = $rs->fetch_assoc()) $cats[] = ['id' => (int)$r['id_categoria'], 'nombre' => $r['categoria']];
+    $st->close();
+
+    $idCat = intGet('categoria');
+    $idsCat = array_column($cats, 'id');
+    if (!in_array($idCat, $idsCat, true)) $idCat = $idsCat[0] ?? 0;
+    if (!$idCat) resp(['success' => true, 'categorias' => [], 'categoria' => 0, 'grupos' => [], 'llaves' => [], 'podio' => null]);
+
+    // Clubes por grupo (orden de sorteo)
+    $st = $mysqli2->prepare(
+        "SELECT s.grupo, s.id_club, cl.nombre FROM _ic_sorteo s JOIN _p_clubes cl ON cl.id = s.id_club
+          WHERE s.id_evento = ? AND s.id_categoria = ? ORDER BY s.grupo ASC, s.posicion ASC");
+    $st->bind_param('ii', $idEvento, $idCat);
+    $st->execute();
+    $rs = $st->get_result();
+    $grupos = []; $mapa = [];
+    while ($r = $rs->fetch_assoc()) {
+        $grupos[(int)$r['grupo']][(int)$r['id_club']] = trim($r['nombre']);
+        $mapa[(int)$r['id_club']] = trim($r['nombre']);
+    }
+    $st->close();
+    $nom = fn($id) => $mapa[(int)$id] ?? ('Club #' . (int)$id);
+
+    // Partidos de la categoría + nombres cortos de jugadores
+    $st = $mysqli2->prepare("SELECT * FROM _ic_partidos WHERE id_evento = ? AND id_categoria = ? ORDER BY es_desempate ASC, id ASC");
+    $st->bind_param('ii', $idEvento, $idCat);
+    $st->execute();
+    $rs = $st->get_result();
+    $partidos = []; $cis = [];
+    while ($r = $rs->fetch_assoc()) { $partidos[] = $r; foreach (['ci1_a','ci1_b','ci2_a','ci2_b'] as $k) if (trim((string)$r[$k]) !== '') $cis[trim($r[$k])] = 1; }
+    $st->close();
+    $nombres = [];
+    if ($cis) {
+        $in = "'" . implode("','", array_map(fn($c) => $mysqli2->real_escape_string($c), array_keys($cis))) . "'";
+        $r2 = $mysqli2->query("SELECT ci, " . ic_sql_nombre_corto() . " n FROM _p_usuarios WHERE TRIM(ci) IN ($in)");
+        if ($r2) while ($x = $r2->fetch_assoc()) $nombres[trim($x['ci'])] = $x['n'];
+    }
+    $dupla = fn($a, $b) => trim(implode(' / ', array_filter([$nombres[trim((string)$a)] ?? '', $nombres[trim((string)$b)] ?? ''])));
+
+    $viejo = ic_criterio_viejo($idEvento, $idCat);
+    $slots = IC_SLOTS_SERIE;
+
+    /** Serie club A vs club B como la ve la app. */
+    $serie = function (string $fase, int $a, int $b, array $ms) use ($nom, $dupla, $slots) {
+        [$wA, $wB, $definida, $ganador, $necesitaDes] = ic_estado_serie($ms, $a, $b, $slots);
+        $enJuego = false;
+        $lista = [];
+        $n = 0;
+        foreach ($ms as $m) {
+            if (($m['en_juego'] ?? 'no') === 'si') $enJuego = true;
+            [$s1, $s2] = ic_sets_partido($m);
+            $gan = ic_ganador_partido($m);
+            $sets = [];
+            foreach ([['s1c1','s1c2'],['s2c1','s2c2'],['s3c1','s3c2']] as [$ka,$kb]) {
+                $va = (int)$m[$ka]; $vb = (int)$m[$kb];
+                if ($va === 0 && $vb === 0) continue;
+                // Desde el lado del club A de la serie
+                $sets[] = ((int)$m['club1'] === $a) ? [$va, $vb] : [$vb, $va];
+            }
+            $ladoA = ((int)$m['club1'] === $a);
+            $n += (int)$m['es_desempate'] === 1 ? 0 : 1;
+            $lista[] = [
+                'id'        => (int)$m['id'],
+                'nro'       => (int)$m['es_desempate'] === 1 ? 0 : $n,
+                'desempate' => (int)$m['es_desempate'] === 1,
+                'duplaA'    => $ladoA ? $dupla($m['ci1_a'], $m['ci1_b']) : $dupla($m['ci2_a'], $m['ci2_b']),
+                'duplaB'    => $ladoA ? $dupla($m['ci2_a'], $m['ci2_b']) : $dupla($m['ci1_a'], $m['ci1_b']),
+                'sets'      => $sets,
+                // 'A' | 'B' | null (0 = sin definir / empatado)
+                'ganador'   => $gan === 0 ? null : ((($gan === 1) === $ladoA) ? 'A' : 'B'),
+                'enJuego'   => ($m['en_juego'] ?? 'no') === 'si',
+            ];
+        }
+        return [
+            'fase'      => $fase,
+            'clubA'     => ['id' => $a, 'nombre' => $nom($a)],
+            'clubB'     => ['id' => $b, 'nombre' => $nom($b)],
+            'ganadas'   => [$wA, $wB],
+            'definida'  => $definida,
+            'ganador'   => $ganador ? ($ganador === $a ? 'A' : 'B') : null,
+            'desempate' => $necesitaDes,
+            'enJuego'   => $enJuego,
+            'slots'     => $slots,
+            'partidos'  => $lista,
+        ];
+    };
+
+    // Grupos: series (todos vs todos) + posiciones
+    $out = [];
+    foreach ($grupos as $g => $clubes) {
+        $ids = array_keys($clubes);
+        $msGrupo = array_values(array_filter($partidos, fn($m) => $m['fase'] === 'grupo' && isset($clubes[(int)$m['club1']]) && isset($clubes[(int)$m['club2']])));
+        $series = [];
+        for ($i = 0; $i < count($ids); $i++) for ($j = $i + 1; $j < count($ids); $j++) {
+            $a = $ids[$i]; $b = $ids[$j];
+            $ms = array_values(array_filter($msGrupo, fn($m) => (min((int)$m['club1'], (int)$m['club2']) === min($a, $b)) && (max((int)$m['club1'], (int)$m['club2']) === max($a, $b))));
+            $series[] = $serie('grupo', $a, $b, $ms);
+        }
+        $pos = ic_posiciones($clubes, $msGrupo, [], $viejo);
+        $tabla = [];
+        $p = 0;
+        foreach ($pos as $c) {
+            $tabla[] = [
+                'posicion' => ++$p,
+                'club'     => $c['club'],
+                'sj'       => (int)$c['sj'],
+                'sg'       => (int)$c['sg'],
+                'sp'       => (int)$c['sp'],
+                'games'    => (int)$c['gamesF'] - (int)$c['gamesC'],
+                'pts'      => (int)$c['pts'],
+            ];
+        }
+        $out[] = ['nombre' => 'GRUPO ' . $g, 'clubes' => array_map(fn($id) => ['id' => $id, 'nombre' => $clubes[$id]], $ids), 'series' => $series, 'tabla' => $tabla];
+    }
+
+    // Llaves: semi1/semi2/final/tercer
+    $st = $mysqli2->prepare("SELECT fase, clubA, clubB FROM _ic_llaves WHERE id_evento=? AND id_categoria=?");
+    $st->bind_param('ii', $idEvento, $idCat);
+    $st->execute();
+    $rs = $st->get_result();
+    $llaves = [];
+    while ($r = $rs->fetch_assoc()) {
+        $fase = $r['fase'];
+        $ms = array_values(array_filter($partidos, fn($m) => $m['fase'] === $fase));
+        $llaves[$fase] = $serie($fase, (int)$r['clubA'], (int)$r['clubB'], $ms);
+    }
+    $st->close();
+    $podio = null;
+    if (isset($llaves['final']) && $llaves['final']['definida']) {
+        $f = $llaves['final'];
+        $podio = [
+            'campeon' => $f['ganador'] === 'A' ? $f['clubA']['nombre'] : $f['clubB']['nombre'],
+            'vice'    => $f['ganador'] === 'A' ? $f['clubB']['nombre'] : $f['clubA']['nombre'],
+            'tercero' => (isset($llaves['tercer']) && $llaves['tercer']['definida'])
+                ? ($llaves['tercer']['ganador'] === 'A' ? $llaves['tercer']['clubA']['nombre'] : $llaves['tercer']['clubB']['nombre'])
+                : null,
+        ];
+    }
+
+    resp(['success' => true, 'categorias' => $cats, 'categoria' => $idCat, 'criterioViejo' => $viejo, 'grupos' => $out, 'llaves' => $llaves, 'podio' => $podio]);
 }
 
 // ══════════════════════════════════════════════════════════════════
