@@ -10,7 +10,7 @@
  *
  * Tablas: ver `sql/2026-08-10_social.sql`.
  *
- * Acciones de lectura : perfil · perfil_evento · muro · duplas · chats · mensajes · buscar
+ * Acciones de lectura : perfil · perfil_evento · muro · likes · duplas · chats · mensajes · buscar
  * Acciones de escritura: publicar · comentar · like · publicar_dupla ·
  *                        abrir_chat · enviar · actualizar_perfil · subir_foto ·
  *                        cambiar_password
@@ -671,6 +671,30 @@ if ($action === 'comentar') {
         notificar($mysqli2, (string)$post['ci_autor'], 'comentario', 'Comentaron tu publicación', mb_substr($texto, 0, 120), "/comunidad?post=$idPost");
     }
     resp(['success' => true, 'id' => $id]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// likes — quiénes dieron me gusta a un post (19-ago-2026). Sin bloqueados.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'likes') {
+    $idPost = inpInt('post');
+    if (!$idPost) respErr('Falta post');
+    $sinBloq = sqlNoEn($mysqli2, 'u.ci', bloqueadosPor($mysqli2, $miCi));
+    $st = $mysqli2->prepare(
+        "SELECT u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario
+         FROM _app_likes l
+         JOIN _p_usuarios u ON u.ci = l.ci
+         WHERE l.id_post = ? $sinBloq
+         ORDER BY l.creado DESC
+         LIMIT 100"
+    );
+    $st->bind_param('i', $idPost);
+    $st->execute();
+    $res = $st->get_result();
+    $jugadores = [];
+    while ($row = $res->fetch_assoc()) $jugadores[] = autorDe($row);
+    $st->close();
+    resp(['success' => true, 'jugadores' => $jugadores]);
 }
 
 // ══════════════════════════════════════════════════════════════════
