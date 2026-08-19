@@ -17,8 +17,12 @@ require_once __DIR__ . '/db/conection.inc.php';
 
 const APP_PACKAGE = 'py.com.bt.app';
 const APP_SCHEME  = 'btapp';
-const APK_URL     = 'https://bt.com.py/app/bt.apk';
 const SITIO       = 'https://bt.com.py';
+// El APK de prueba vive en /app/bt.apk. Va con ?v=<mtime>: Cloudflare cachea los .apk por URL
+// y sin la versión un APK nuevo (o el 404 previo) se queda pegado hasta 2 h.
+$apkPath = __DIR__ . '/app/bt.apk';
+$hayApk  = is_file($apkPath);
+$apkUrl  = SITIO . '/app/bt.apk' . ($hayApk ? '?v=' . filemtime($apkPath) : '');
 
 $ruta   = trim((string)($_GET['ruta'] ?? ''), '/');
 $ruta   = preg_replace('~[^a-z0-9/_-]~i', '', $ruta) ?? '';
@@ -56,7 +60,7 @@ if (($seccion === 'torneo' || $seccion === 'inscripcion') && ctype_digit($arg)) 
 
 $urlApp    = SITIO . '/app/' . $ruta;                                   // App Link (Android/iOS con la app)
 $urlScheme = APP_SCHEME . '://app/' . $ruta;                            // esquema propio (iOS / fallback)
-$urlIntent = 'intent://bt.com.py/app/' . $ruta . '#Intent;scheme=https;package=' . APP_PACKAGE . ';S.browser_fallback_url=' . rawurlencode(APK_URL) . ';end'; // Chrome Android
+$urlIntent = 'intent://bt.com.py/app/' . $ruta . '#Intent;scheme=https;package=' . APP_PACKAGE . ';S.browser_fallback_url=' . rawurlencode($apkUrl) . ';end'; // Chrome Android
 $esAndroid = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'android') !== false;
 $esIos     = preg_match('/iphone|ipad|ipod/i', $_SERVER['HTTP_USER_AGENT'] ?? '') === 1;
 $abrir     = $esAndroid ? $urlIntent : ($esIos ? $urlScheme : $urlApp);
@@ -104,7 +108,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <h1><?= $h($titulo) ?></h1>
       <p><?= $h($desc) ?></p>
       <a class="btn btn-app" href="<?= $h($abrir) ?>">ABRIR EN LA APP</a>
-      <?php if (!$esIos): ?><a class="btn btn-apk" href="<?= $h(APK_URL) ?>">DESCARGAR LA APP (ANDROID)</a><?php endif; ?>
+      <?php if (!$esIos && $hayApk): ?><a class="btn btn-apk" href="<?= $h($apkUrl) ?>">DESCARGAR LA APP (ANDROID)</a><?php endif; ?>
       <a class="btn btn-web" href="<?= $h($web) ?>">VER EN LA WEB</a>
       <small>¿Ya tenés la app instalada y no se abrió sola? Tocá "Abrir en la app".<?= $esIos ? ' La versión para iPhone llega pronto.' : '' ?></small>
     </div>
