@@ -10,7 +10,7 @@
  *
  * Tablas: ver `sql/2026-08-10_social.sql`.
  *
- * Acciones de lectura : perfil · perfil_evento · muro · duplas · chats · mensajes
+ * Acciones de lectura : perfil · perfil_evento · muro · duplas · chats · mensajes · buscar
  * Acciones de escritura: publicar · comentar · like · publicar_dupla ·
  *                        abrir_chat · enviar · actualizar_perfil · subir_foto ·
  *                        cambiar_password
@@ -44,7 +44,7 @@ function autorDe(array $row, string $prefijo = ''): array {
         'ci'     => $row[$prefijo . 'ci'] ?? '',
         'nombre' => trim(($row[$prefijo . 'nombre'] ?? '') . ' ' . ($row[$prefijo . 'apellido'] ?? '')),
         'meta'   => $row[$prefijo . 'ciudad'] ?? '',
-        'fotoUrl' => null,
+        'fotoUrl' => fotoUrl($row[$prefijo . 'imagen_usuario'] ?? null),
     ];
 }
 
@@ -529,7 +529,7 @@ if ($action === 'muro') {
 
     $st = $mysqli2->prepare(
         "SELECT p.id, p.texto, p.imagen, p.creado, p.likes, p.comentarios,
-                u.ci, u.nombre, u.apellido, u.ciudad,
+                u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario,
                 (SELECT COUNT(*) FROM _app_likes l WHERE l.id_post = p.id AND l.ci = ?) AS mi_like
          FROM _app_posts p
          LEFT JOIN _p_usuarios u ON u.ci = p.ci_autor
@@ -565,7 +565,7 @@ if ($action === 'muro') {
         $in = implode(',', array_fill(0, count($ids), '?'));
         $sinBloqC = sqlNoEn($mysqli2, 'c.ci_autor', bloqueadosPor($mysqli2, $miCi));
         $sql = "SELECT c.id, c.id_post, c.id_padre, c.texto, c.creado,
-                       u.ci, u.nombre, u.apellido, u.ciudad
+                       u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario
                 FROM _app_comentarios c
                 LEFT JOIN _p_usuarios u ON u.ci = c.ci_autor
                 WHERE c.estado = 'publicado' AND c.id_post IN ($in) $sinBloqC
@@ -713,7 +713,7 @@ if ($action === 'duplas') {
     $sinBloq = sqlNoEn($mysqli2, 'd.ci_autor', bloqueadosPor($mysqli2, $miCi));
     $st = $mysqli2->prepare(
         "SELECT d.id, d.texto, d.disponibilidad, d.creado, c.categoria,
-                u.ci, u.nombre, u.apellido, u.ciudad
+                u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario
          FROM _app_busca_dupla d
          LEFT JOIN _p_usuarios u ON u.ci = d.ci_autor
          LEFT JOIN _p_categorias c ON c.id = d.id_categoria
@@ -731,6 +731,7 @@ if ($action === 'duplas') {
             'categoria' => $row['categoria'] ?? '',
             'texto' => $row['texto'],
             'disponibilidad' => $row['disponibilidad'] ?? '',
+            'fecha' => $row['creado'],
             'mio'   => (string)$row['ci'] === $miCi,
         ];
     }
@@ -761,7 +762,7 @@ if ($action === 'chats') {
     $sinBloq = sqlNoEn($mysqli2, 'IF(ch.ci_a = \'' . $mysqli2->real_escape_string($miCi) . '\', ch.ci_b, ch.ci_a)', bloqueosDe($mysqli2, $miCi));
     $st = $mysqli2->prepare(
         "SELECT ch.id, ch.ci_a, ch.ci_b, ch.ultimo_msg,
-                u.ci, u.nombre, u.apellido, u.ciudad,
+                u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario,
                 (SELECT texto FROM _app_mensajes m WHERE m.id_chat = ch.id ORDER BY m.creado DESC LIMIT 1) AS ultimo,
                 (SELECT COUNT(*) FROM _app_mensajes m WHERE m.id_chat = ch.id AND m.leido IS NULL AND m.ci_autor <> ?) AS sin_leer
          FROM _app_chats ch
@@ -829,6 +830,38 @@ if ($action === 'mensajes') {
     $st->close();
 
     resp(['success' => true, 'mensajes' => $mensajes]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// buscar — jugadores del padrón por nombre / apellido / CI, para NUEVO CHAT
+// (19-ago-2026). Saca al propio jugador, a los bloqueados en cualquier
+// sentido y a las cuentas eliminadas desde la app.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'buscar') {
+    $q = trim(inp('q', ''));
+    if (mb_strlen($q) < 3) respErr('Mínimo 3 caracteres para buscar');
+    $like = '%' . $q . '%';
+    $pref = $q . '%';
+    $sinBloq = sqlNoEn($mysqli2, 'u.ci', array_merge([$miCi], bloqueosDe($mysqli2, $miCi)));
+    $st = $mysqli2->prepare(
+        "SELECT u.ci, u.nombre, u.apellido, u.ciudad, u.imagen_usuario
+         FROM _p_usuarios u
+         LEFT JOIN _app_jugadores j ON j.ci = u.ci AND j.eliminado_en IS NOT NULL
+         WHERE j.ci IS NULL
+           AND (u.nombre LIKE ? OR u.apellido LIKE ?
+                OR CONCAT(u.nombre, ' ', u.apellido) LIKE ?
+                OR CONCAT(u.apellido, ' ', u.nombre) LIKE ?
+                OR u.ci LIKE ?) $sinBloq
+         ORDER BY u.apellido, u.nombre
+         LIMIT 15"
+    );
+    $st->bind_param('sssss', $pref, $pref, $like, $like, $pref);
+    $st->execute();
+    $res = $st->get_result();
+    $jugadores = [];
+    while ($row = $res->fetch_assoc()) $jugadores[] = autorDe($row);
+    $st->close();
+    resp(['success' => true, 'jugadores' => $jugadores]);
 }
 
 // ══════════════════════════════════════════════════════════════════
