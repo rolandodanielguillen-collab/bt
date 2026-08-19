@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "py.com.bt.app",
+      "sha256_cert_fingerprints": [
+        "B9:31:0C:7D:4F:C7:B0:5F:F8:56:B1:DB:D7:5A:49:EC:BC:A2:49:59:1D:0B:4E:91:96:D6:9A:D3:60:FF:6C:B2"
+      ]
+    }
+  }
+]
