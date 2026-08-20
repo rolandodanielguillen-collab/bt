@@ -1060,12 +1060,17 @@ if ($action === 'registrar_dispositivo') {
     // `badge`: si el teléfono permite el numerito en el ícono (iOS). Sirve para
     // saber por qué a alguien no le aparece sin pedirle que mire los ajustes.
     $badge = array_key_exists('badge', $raw) && $raw['badge'] !== null ? (int)(bool)$raw['badge'] : null;
+    // Token nativo de APNs/FCM: permite mandar directo a Apple sin pasar por Expo.
+    $nativo = trim((string)($raw['nativo'] ?? ''));
+    if ($nativo !== '' && !preg_match('/^[A-Za-z0-9:_-]{32,200}$/', $nativo)) $nativo = '';
+    $nativo = $nativo !== '' ? $nativo : null;
 
     $st = $mysqli2->prepare(
-        "INSERT INTO _app_dispositivos (ci, expo_token, plataforma, badge_ok, ultimo_uso) VALUES (?, ?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE ci = VALUES(ci), plataforma = VALUES(plataforma), badge_ok = VALUES(badge_ok), ultimo_uso = NOW()"
+        "INSERT INTO _app_dispositivos (ci, expo_token, plataforma, badge_ok, token_nativo, ultimo_uso) VALUES (?, ?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE ci = VALUES(ci), plataforma = VALUES(plataforma), badge_ok = VALUES(badge_ok),
+                                 token_nativo = COALESCE(VALUES(token_nativo), token_nativo), ultimo_uso = NOW()"
     );
-    $st->bind_param('sssi', $miCi, $token, $plat, $badge);
+    $st->bind_param('sssis', $miCi, $token, $plat, $badge, $nativo);
     $st->execute(); $st->close();
     resp(['success' => true]);
 }
