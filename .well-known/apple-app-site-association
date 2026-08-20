@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["MP6XMBUFRJ.py.com.bt.app"],
+        "components": [
+          { "/": "/app/*", "comment": "torneos, inscripciones, ranking, comunidad" }
+        ]
+      }
+    ]
+  }
+}
