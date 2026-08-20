@@ -13,9 +13,11 @@
  * ================================================================
  */
 
-const PUSH_URL     = 'https://exp.host/--/api/v2/push/send';
-const PUSH_LOTE    = 100; // tope de mensajes por request que acepta Expo
-const PUSH_TIMEOUT = 5;   // segundos: que un Expo lento no cuelgue la API
+const PUSH_URL         = 'https://exp.host/--/api/v2/push/send';
+const PUSH_RECIBOS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
+const PUSH_LOTE        = 100; // tope de mensajes por request que acepta Expo
+const PUSH_TIMEOUT     = 5;   // segundos: que un Expo lento no cuelgue la API
+const PUSH_RECIBO_MIN  = 15;  // minutos antes de consultar el recibo (lo que pide Expo)
 
 /**
  * ¿Este tipo de aviso está activo? Lo gobierna `_app_push_config` desde el
@@ -73,8 +75,12 @@ function pushAJugadores(mysqli $db, array $cis, string $tipo, string $titulo, st
 /**
  * Envío crudo a Expo en lotes de PUSH_LOTE. Borra de `_app_dispositivos` los
  * tokens que Expo reporta como `DeviceNotRegistered` (app desinstalada).
+ * Antes de mandar, revisa los recibos pendientes del envío anterior: el token
+ * muerto por REINSTALACIÓN da ticket "ok" y el error recién sale en el recibo
+ * (pasó el 20-ago: `enviados` contaba teléfonos que ya no existían).
  */
 function pushEnviar(mysqli $db, array $mensajes): int {
+    try { pushRevisarRecibos($db); } catch (Throwable $e) { error_log('bt push recibos: ' . $e->getMessage()); }
     $ok = 0;
     foreach (array_chunk($mensajes, PUSH_LOTE) as $lote) {
         $ch = curl_init(PUSH_URL);
@@ -96,7 +102,17 @@ function pushEnviar(mysqli $db, array $mensajes): int {
         if (!is_array($tickets)) { error_log('bt push: respuesta rara de Expo: ' . mb_substr($raw, 0, 300)); continue; }
 
         foreach ($tickets as $i => $t) {
-            if (($t['status'] ?? '') === 'ok') { $ok++; continue; }
+            if (($t['status'] ?? '') === 'ok') {
+                $ok++;
+                // El recibo (con el veredicto real de FCM/APNs) se revisa después.
+                if (!empty($t['id'])) {
+                    $st = $db->prepare("INSERT IGNORE INTO _app_push_tickets (id, expo_token) VALUES (?, ?)");
+                    $st->bind_param('ss', $t['id'], $lote[$i]['to']);
+                    $st->execute();
+                    $st->close();
+                }
+                continue;
+            }
             $detalle = $t['details']['error'] ?? ($t['message'] ?? 'error');
             if ($detalle === 'DeviceNotRegistered') {
                 $token = $lote[$i]['to'];
@@ -110,4 +126,57 @@ function pushEnviar(mysqli $db, array $mensajes): int {
         }
     }
     return $ok;
+}
+
+/**
+ * Consulta a Expo los recibos de envíos anteriores (≥ PUSH_RECIBO_MIN min) y
+ * borra los dispositivos cuyo recibo dice `DeviceNotRegistered` — el caso
+ * típico es una reinstalación de la app: el ticket dio "ok" pero FCM ya no
+ * conoce ese token. Los tickets consultados se descartan; los que Expo aún no
+ * resolvió se reintentan en el próximo envío.
+ */
+function pushRevisarRecibos(mysqli $db): void {
+    $res = $db->query(
+        "SELECT id, expo_token FROM _app_push_tickets
+         WHERE creado < NOW() - INTERVAL " . PUSH_RECIBO_MIN . " MINUTE
+         ORDER BY creado ASC LIMIT 300"
+    );
+    $pendientes = [];
+    while ($x = $res->fetch_assoc()) $pendientes[$x['id']] = $x['expo_token'];
+    if (!$pendientes) return;
+
+    $ch = curl_init(PUSH_RECIBOS_URL);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
+        CURLOPT_POSTFIELDS     => json_encode(['ids' => array_keys($pendientes)]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => PUSH_TIMEOUT,
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    if ($raw === false) return;
+
+    $recibos = json_decode($raw, true)['data'] ?? null;
+    if (!is_array($recibos)) return;
+
+    $del = $db->prepare("DELETE FROM _app_dispositivos WHERE expo_token = ?");
+    $fin = $db->prepare("DELETE FROM _app_push_tickets WHERE id = ?");
+    foreach ($recibos as $id => $r) {
+        if (($r['status'] ?? '') === 'error') {
+            $detalle = $r['details']['error'] ?? ($r['message'] ?? 'error');
+            if ($detalle === 'DeviceNotRegistered' && isset($pendientes[$id])) {
+                $del->bind_param('s', $pendientes[$id]);
+                $del->execute();
+            } else {
+                error_log("bt push: recibo con error: $detalle");
+            }
+        }
+        $fin->bind_param('s', $id);
+        $fin->execute();
+    }
+    $del->close();
+    $fin->close();
+    // Tickets que Expo nunca resolvió (los recibos viejos se descartan de su lado).
+    $db->query("DELETE FROM _app_push_tickets WHERE creado < NOW() - INTERVAL 2 DAY");
 }
