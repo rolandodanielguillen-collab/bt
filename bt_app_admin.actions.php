@@ -13,6 +13,15 @@ require_once __DIR__ . '/bt_app_moderacion.inc.php';
 
 $accionesApp = ['mod_denuncias', 'mod_resolver', 'mod_jugador', 'mod_suspender', 'mod_levantar', 'mod_pendientes',
                 'avisos_config', 'avisos_toggle', 'difusiones', 'difusion_crear'];
+
+/**
+ * Quiénes "usan la app": tienen el teléfono registrado (push) o pasaron por
+ * Comunidad. Antes se miraba sólo `_app_jugadores`, que se llena recién al
+ * aceptar las normas de la comunidad: quien sólo iniciaba sesión NO recibía las
+ * difusiones aunque tuviera la app instalada (20-ago-2026, CI 2365344).
+ * Al eliminar la cuenta se borran sus dispositivos, así que no reaparece.
+ */
+const USUARIOS_APP = '(SELECT ci FROM _app_dispositivos UNION SELECT ci FROM _app_jugadores WHERE eliminado_en IS NULL)';
 if (in_array($action, $accionesApp, true)) {
     if (($_SESSION['admin_tipo'] ?? '') !== 'superadmin') respErr('Sólo superadmin');
     $adminActor = (string)($_SESSION['admin_user'] ?? 'admin');
@@ -124,7 +133,9 @@ if (in_array($action, $accionesApp, true)) {
         $r = $mysqli2->query("SELECT tipo, titulo, activo, orden FROM _app_push_config ORDER BY orden ASC");
         $out = []; while ($x = $r->fetch_assoc()) $out[] = ['tipo' => $x['tipo'], 'titulo' => $x['titulo'], 'activo' => (bool)$x['activo']];
         $disp = (int)$mysqli2->query("SELECT COUNT(*) c FROM _app_dispositivos")->fetch_assoc()['c'];
-        $jug = (int)$mysqli2->query("SELECT COUNT(*) c FROM _app_jugadores WHERE terminos_en IS NOT NULL AND eliminado_en IS NULL")->fetch_assoc()['c'];
+        // Mismo criterio que las difusiones: si el KPI contara sólo a los de
+        // Comunidad, diría menos gente de la que realmente recibe los avisos.
+        $jug = (int)$mysqli2->query("SELECT COUNT(*) c FROM " . USUARIOS_APP . " AS u")->fetch_assoc()['c'];
         resp(['success' => true, 'config' => $out, 'dispositivos' => $disp, 'jugadoresApp' => $jug]);
     }
 
@@ -156,11 +167,11 @@ if (in_array($action, $accionesApp, true)) {
 
         // Destinatarios: todos los que usan la app, o los inscriptos del evento / del circuito.
         if ($filtro === 'evento' && $filtroId) {
-            $q = "SELECT DISTINCT i.ci FROM _p_incripciones i WHERE i.id_evento = $filtroId AND i.ci IN (SELECT ci FROM _app_jugadores WHERE eliminado_en IS NULL)";
+            $q = "SELECT DISTINCT i.ci FROM _p_incripciones i WHERE i.id_evento = $filtroId AND i.ci IN " . USUARIOS_APP;
         } elseif ($filtro === 'circuito' && $filtroId) {
-            $q = "SELECT DISTINCT i.ci FROM _p_incripciones i JOIN _p_eventos e ON e.id = i.id_evento WHERE e.id_circuito = $filtroId AND i.ci IN (SELECT ci FROM _app_jugadores WHERE eliminado_en IS NULL)";
+            $q = "SELECT DISTINCT i.ci FROM _p_incripciones i JOIN _p_eventos e ON e.id = i.id_evento WHERE e.id_circuito = $filtroId AND i.ci IN " . USUARIOS_APP;
         } else {
-            $q = "SELECT ci FROM _app_jugadores WHERE eliminado_en IS NULL";
+            $q = "SELECT ci FROM " . USUARIOS_APP . " AS u";
         }
         $n = 0; $cis = []; $r = $mysqli2->query($q);
         while ($x = $r->fetch_assoc()) { notificar($mysqli2, (string)$x['ci'], 'difusion', $titulo, $cuerpo, $destino); $cis[] = (string)$x['ci']; $n++; }
