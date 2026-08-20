@@ -162,8 +162,17 @@ if (in_array($action, $accionesApp, true)) {
         } else {
             $q = "SELECT ci FROM _app_jugadores WHERE eliminado_en IS NULL";
         }
-        $n = 0; $r = $mysqli2->query($q);
-        while ($x = $r->fetch_assoc()) { notificar($mysqli2, (string)$x['ci'], 'difusion', $titulo, $cuerpo, $destino); $n++; }
-        resp(['success' => true, 'id' => $idDif, 'inApp' => $n]);
+        $n = 0; $cis = []; $r = $mysqli2->query($q);
+        while ($x = $r->fetch_assoc()) { notificar($mysqli2, (string)$x['ci'], 'difusion', $titulo, $cuerpo, $destino); $cis[] = (string)$x['ci']; $n++; }
+
+        // Push a los teléfonos, en un solo lote (fase 3, 20-ago-2026). Best-effort:
+        // si Expo falla, la campana in-app ya quedó y `enviados` queda en 0.
+        $push = 0;
+        try { $push = pushAJugadores($mysqli2, $cis, 'difusion', $titulo, $cuerpo, $destino); }
+        catch (Throwable $e) { error_log('bt push difusion: ' . $e->getMessage()); }
+        $st = $mysqli2->prepare("UPDATE _app_difusiones SET enviado_en = NOW(), enviados = ? WHERE id = ?");
+        $st->bind_param('ii', $push, $idDif); $st->execute(); $st->close();
+
+        resp(['success' => true, 'id' => $idDif, 'inApp' => $n, 'push' => $push]);
     }
 }

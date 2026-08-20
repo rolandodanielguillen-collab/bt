@@ -31,7 +31,7 @@ $action = inp('action');
 if (!$action) respErr('Falta parámetro action');
 
 $esEscritura = in_array($action, ['publicar', 'comentar', 'like', 'publicar_dupla', 'abrir_chat', 'enviar', 'actualizar_perfil', 'subir_foto', 'cambiar_password',
-                                    'aceptar_terminos', 'bloquear', 'desbloquear', 'denunciar', 'marcar_leidas', 'eliminar_cuenta'], true);
+                                    'aceptar_terminos', 'bloquear', 'desbloquear', 'denunciar', 'marcar_leidas', 'eliminar_cuenta', 'registrar_dispositivo'], true);
 if ($esEscritura && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     respErr('Esta acción requiere POST', 405);
 }
@@ -1040,6 +1040,29 @@ if ($action === 'notificaciones') {
 if ($action === 'marcar_leidas') {
     $st = $mysqli2->prepare("UPDATE _app_notificaciones SET leida = NOW() WHERE ci = ? AND leida IS NULL");
     $st->bind_param('s', $miCi); $st->execute(); $st->close();
+    resp(['success' => true]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// registrar_dispositivo — POST {token, plataforma} (push, fase 3, 20-ago-2026)
+// La app lo llama cada vez que arranca con sesión. Un token es de UN teléfono:
+// si otro jugador inicia sesión en ese teléfono, el token pasa a ser suyo.
+// El push llega sin sesión abierta (así lo pidió el dueño); leer la campana
+// sigue exigiendo login.
+// ══════════════════════════════════════════════════════════════════
+if ($action === 'registrar_dispositivo') {
+    $raw = json_decode(file_get_contents('php://input'), true) ?: [];
+    $token = trim((string)($raw['token'] ?? ''));
+    $plat  = (string)($raw['plataforma'] ?? '');
+    if (!preg_match('/^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/', $token)) respErr('Token de push no válido');
+    if (!in_array($plat, ['ios', 'android'], true)) respErr('Plataforma no válida');
+
+    $st = $mysqli2->prepare(
+        "INSERT INTO _app_dispositivos (ci, expo_token, plataforma, ultimo_uso) VALUES (?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE ci = VALUES(ci), plataforma = VALUES(plataforma), ultimo_uso = NOW()"
+    );
+    $st->bind_param('sss', $miCi, $token, $plat);
+    $st->execute(); $st->close();
     resp(['success' => true]);
 }
 

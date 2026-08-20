@@ -11,6 +11,8 @@
  * ================================================================
  */
 
+require_once __DIR__ . '/bt_app_push.inc.php';
+
 const TERMINOS_VERSION = '2026-08-18';
 const MODERACION_ENV = '/home/bt.com.py/.bt_app.env';
 /** Segundos mínimos entre publicaciones del mismo jugador (anti-flood). */
@@ -110,6 +112,13 @@ function notificar(mysqli $db, string $ci, string $tipo, string $titulo, string 
     $st = $db->prepare("INSERT INTO _app_notificaciones (ci, tipo, titulo, cuerpo, destino) VALUES (?, ?, ?, ?, ?)");
     $st->bind_param('sssss', $ci, $tipo, $titulo, $cuerpo, $destino);
     $st->execute(); $st->close();
+    // Push al teléfono (fase 3, 20-ago-2026). Best-effort: la campana ya quedó
+    // escrita arriba. Las difusiones NO salen de acá: difusion_crear las manda
+    // en un solo lote con pushAJugadores para no hacer un request por jugador.
+    if ($tipo !== 'difusion') {
+        try { pushAJugadores($db, [$ci], $tipo, $titulo, $cuerpo, $destino); }
+        catch (Throwable $e) { error_log('bt push: ' . $e->getMessage()); }
+    }
 }
 
 /** Aviso al moderador: mail + Telegram (los dos best-effort; el admin siempre lo lista). */
