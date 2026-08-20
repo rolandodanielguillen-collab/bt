@@ -36,7 +36,7 @@
 
     <div class="page" id="pg-avisos">
       <div class="pg-row">
-        <div><div class="pg-title">Avisos de la app</div><div class="pg-sub">Qué notificaciones manda la app y difusiones a los jugadores. Los avisos automáticos (partidos, resultados, inscripciones, ranking) se envían por push cuando se active el servicio; mientras tanto las difusiones llegan a la campana de la app.</div></div>
+        <div><div class="pg-title">Avisos de la app</div><div class="pg-sub">Qué notificaciones manda la app y difusiones a los jugadores. Las difusiones llegan a la campana de la app y por push al teléfono (activo desde el 20-ago). Menciones, comentarios y chat también pushean solos; los avisos de partidos/resultados/inscripciones/ranking saldrán cuando se conecten sus disparadores.</div></div>
       </div>
       <div class="kpi-grid" style="margin-bottom:16px;">
         <div class="kpi"><div class="kpi-ct"><div class="kpi-val" id="avJug">—</div><div class="kpi-lb">Jugadores usando la app</div></div></div>
