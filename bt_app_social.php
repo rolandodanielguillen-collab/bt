@@ -1057,11 +1057,15 @@ if ($action === 'registrar_dispositivo') {
     if (!preg_match('/^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/', $token)) respErr('Token de push no válido');
     if (!in_array($plat, ['ios', 'android'], true)) respErr('Plataforma no válida');
 
+    // `badge`: si el teléfono permite el numerito en el ícono (iOS). Sirve para
+    // saber por qué a alguien no le aparece sin pedirle que mire los ajustes.
+    $badge = array_key_exists('badge', $raw) && $raw['badge'] !== null ? (int)(bool)$raw['badge'] : null;
+
     $st = $mysqli2->prepare(
-        "INSERT INTO _app_dispositivos (ci, expo_token, plataforma, ultimo_uso) VALUES (?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE ci = VALUES(ci), plataforma = VALUES(plataforma), ultimo_uso = NOW()"
+        "INSERT INTO _app_dispositivos (ci, expo_token, plataforma, badge_ok, ultimo_uso) VALUES (?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE ci = VALUES(ci), plataforma = VALUES(plataforma), badge_ok = VALUES(badge_ok), ultimo_uso = NOW()"
     );
-    $st->bind_param('sss', $miCi, $token, $plat);
+    $st->bind_param('sssi', $miCi, $token, $plat, $badge);
     $st->execute(); $st->close();
     resp(['success' => true]);
 }
