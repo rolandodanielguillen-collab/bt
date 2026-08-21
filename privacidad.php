@@ -48,7 +48,7 @@ legalInicio('Política de privacidad', 'Qué datos recoge la app Beach Tennis PY
 </ul>
 
 <h2>7. Seguridad</h2>
-<p>Toda la comunicación entre la app y el servidor va cifrada (HTTPS). Las contraseñas se guardan con hash, nunca en texto plano. El acceso a la base de datos está restringido al equipo técnico.</p>
+<p>Toda la comunicación entre la app y el servidor va cifrada (HTTPS). El acceso a la base de datos está restringido al equipo técnico y estamos migrando el almacenamiento de contraseñas a hash.</p>
 
 <h2>8. Menores de edad</h2>
 <p>La app está pensada para jugadores de beach tennis. Si tenés menos de 18 años, usala con el conocimiento de tu madre, padre o tutor. No registramos a sabiendas a menores de 13 años; si detectamos una cuenta así, la eliminamos.</p>
