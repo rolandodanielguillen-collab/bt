@@ -747,18 +747,17 @@ if ($action === 'resultados_ic') {
     resp(['success' => true, 'categorias' => $cats, 'categoria' => $idCat, 'criterioViejo' => $viejo, 'grupos' => $out, 'llaves' => $llaves, 'podio' => $podio]);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// ranking — MISMA estructura que la página web (logica/mostrar-ranking.php):
-// una tarjeta por categoría, y dentro cada jugador con el desglose por fecha.
+// ==================================================================
+// ranking - MISMA estructura que la pagina web (logica/mostrar-ranking.php):
+// una tarjeta por categoria, y dentro cada jugador con el desglose por fecha.
 //
-// ⚠️ DEUDA: el criterio de puntos está duplicado (acá, en tvt_api.php ~490 y
-// en logica/mostrar-ranking.php). Si cambia allá, cambiar acá. El arreglo real
-// es extraerlo a un bt_ranking.functions.php compartido.
-//
-// Es N+1 (una consulta por jugador por evento) y el endpoint es público:
-// por eso va con caché en disco.
-// ══════════════════════════════════════════════════════════════════
+// El criterio de puntos NO vive aca: es bt_ranking.functions.php, el mismo
+// archivo que usan el sitio, el admin y la siembra de llaves.
+// Endpoint publico: la precarga son 4 consultas y ademas queda cacheada.
+// ==================================================================
 if ($action === 'ranking') {
+    require_once __DIR__ . '/bt_ranking.functions.php';
+
     $circ  = intGet('circuito', 1);
     $q     = strGet('q');
 
@@ -770,7 +769,7 @@ if ($action === 'ranking') {
         exit;
     }
 
-    // Mapa de categorías: id → padre + nombre.
+    // Mapa de categorias: id -> padre + nombre.
     $catMap = [];
     $rCats = $mysqli2->query("SELECT id_categoria, id_categoria_padre, categoria FROM v_p_categorias");
     if ($rCats) while ($rc = $rCats->fetch_assoc()) {
@@ -780,105 +779,60 @@ if ($action === 'ranking') {
         ];
     }
 
-    // Nombres de evento, para el desglose por fecha.
-    $eventoNombre = [];
-    $rEv = $mysqli2->query("SELECT id, evento FROM _p_eventos");
-    if ($rEv) while ($e = $rEv->fetch_assoc()) $eventoNombre[(int)$e['id']] = $e['evento'];
+    $rk = bt_rank_cargar($mysqli2, $circ);
 
     $categorias = [];
-
-    foreach ($catMap as $idCat => $info) {
-        $padreCat = $info['padre'];
-        if ($padreCat <= 0) continue; // sólo categorías hijo, como la web
-
-        $rJug = $mysqli2->query("SELECT DISTINCT r.ci, u.nombre, u.apellido
-                   FROM _ranking r
-                   LEFT JOIN _p_usuarios u ON u.ci = r.ci
-                   WHERE r.circuito = $circ AND r.categoria = $idCat AND r.puntos > 0");
-        if (!$rJug) continue;
+    // Mismo orden de tarjetas que la web: orden de aparicion en _ranking.
+    foreach ($rk['categorias'] as $idCat) {
+        $idCat = (int)$idCat;
+        if (!isset($catMap[$idCat])) continue;
+        $padreCat = $catMap[$idCat]['padre'];
+        if ($padreCat <= 0) continue; // solo categorias hijo, como la web
 
         $jugadores = [];
-        while ($jug = $rJug->fetch_assoc()) {
-            $ciRaw = (string)$jug['ci'];
-            $ci = $mysqli2->real_escape_string($ciRaw);
+        foreach (bt_rank_jugadores_cat($idCat, $padreCat) as $j) {
+            $ci = (string)$j['ci'];
             if (trim($ci) === '') continue;
+            $u = bt_rank_usuario($ci);
+            $nombre   = $u['nombre'] ?? '';
+            $apellido = $u['apellido'] ?? '';
+            if ($q !== '' && stripos("$nombre $apellido $ci", $q) === false) continue;
 
-            $nombre   = $jug['nombre'] ?? '';
-            $apellido = $jug['apellido'] ?? '';
-
-            if ($q !== '' && stripos("$nombre $apellido $ciRaw", $q) === false) continue;
-
-            $totalPadre = 0;
-            $totalCat   = 0;
-            $detalle    = [];
-
-            $rEvts = $mysqli2->query("SELECT DISTINCT i.id_evento
-                        FROM _p_incripciones i
-                        JOIN _p_eventos ev ON ev.id = i.id_evento
-                        WHERE (i.ci = '$ci' OR i.ci_dupla = '$ci')
-                          AND (i.id_categoria = $idCat OR i.id_categoria = $padreCat)
-                          AND ev.id_circuito = $circ");
-            if (!$rEvts) continue;
-
-            while ($rowEvt = $rEvts->fetch_assoc()) {
-                $evId = (int)$rowEvt['id_evento'];
-
-                $resPP = $mysqli2->query("SELECT puntos FROM _ranking
-                    WHERE evento = $evId AND circuito = $circ AND ci = '$ci' AND categoria = $padreCat");
-                $ptsPadre = ($x = ($resPP ? $resPP->fetch_assoc() : null)) ? abs($x['puntos']) : 0;
-
-                $resPH = $mysqli2->query("SELECT puntos FROM _ranking
-                    WHERE evento = $evId AND circuito = $circ AND ci = '$ci' AND categoria = $idCat");
-                $ptsCat = ($x = ($resPH ? $resPH->fetch_assoc() : null)) ? abs($x['puntos']) : 0;
-
-                $totalPadre += $ptsPadre;
-                $totalCat   += $ptsCat;
-
-                // La web sólo lista la fecha si sumó algo en alguna de las dos.
-                if ($ptsPadre > 0 || $ptsCat > 0) {
-                    $detalle[] = [
-                        'evento'       => $eventoNombre[$evId] ?? "Fecha #$evId",
-                        'ptsPadre'     => $ptsPadre,
-                        'ptsCategoria' => $ptsCat,
-                    ];
-                }
+            $detalle = [];
+            foreach (bt_rank_detalle($ci, $idCat, $padreCat) as $d) {
+                $detalle[] = [
+                    'evento'       => $d['evento'],
+                    'ptsPadre'     => $d['ptsPadre'],
+                    'ptsCategoria' => $d['ptsCategoria'],
+                ];
             }
 
             $jugadores[] = [
-                'ci'           => $ciRaw,
+                'ci'           => $ci,
                 'nombre'       => $nombre,
                 'apellido'     => $apellido,
-                'ptsPadre'     => $totalPadre,
-                'ptsCategoria' => $totalCat,
-                'total'        => $totalPadre + $totalCat,
+                'ptsPadre'     => $j['ptosMixto'],
+                'ptsCategoria' => $j['ptosHijo'],
+                'total'        => $j['total'],
                 'detalle'      => $detalle,
             ];
         }
 
         if (!$jugadores) continue;
-
-        usort($jugadores, fn($a, $b) => $b['total'] <=> $a['total']);
-        foreach ($jugadores as $i => &$j) { $j['pos'] = $i + 1; }
-        unset($j);
+        foreach ($jugadores as $i => &$jj) { $jj['pos'] = $i + 1; }
+        unset($jj);
 
         $categorias[] = [
             'id'           => $idCat,
-            'nombre'       => $info['nombre'],
+            'nombre'       => $catMap[$idCat]['nombre'],
             'colPadre'     => $catMap[$padreCat]['nombre'] ?? 'Mixto',
-            'colCategoria' => $info['nombre'],
+            'colCategoria' => $catMap[$idCat]['nombre'],
             'jugadores'    => $jugadores,
         ];
     }
 
-    // Mismo orden de tarjetas que la web: primera aparición de la categoría en
-    // _ranking (la web itera las filas tal cual vienen; equivale a MIN(id)).
-    $ordenCat = [];
-    $rOrd = $mysqli2->query("SELECT categoria, MIN(id) m FROM _ranking WHERE circuito = $circ AND puntos > 0 GROUP BY categoria ORDER BY m");
-    if ($rOrd) while ($o = $rOrd->fetch_assoc()) $ordenCat[(int)$o['categoria']] = count($ordenCat);
-    usort($categorias, fn($a, $b) => ($ordenCat[$a['id']] ?? PHP_INT_MAX) <=> ($ordenCat[$b['id']] ?? PHP_INT_MAX));
-
-    // TOP 10 — PUNTOS GENERALES, como en la web: por CI se suma el total de todas
-    // las categorías; primer nombre + primer apellido en mayúsculas.
+    // TOP 10 - PUNTOS GENERALES, como en la web: por CI se suma el total de todas
+    // las categorias; primer nombre + primer apellido en mayusculas.
     $top10 = [];
     foreach ($categorias as $cat) {
         foreach ($cat['jugadores'] as $j) {

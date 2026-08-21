@@ -478,136 +478,63 @@ if ($action === 'ranking_count') {
     resp(['success' => true, 'total' => $total]);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// ACTION: ranking — Ranking de jugadores desde _ranking
-// Replica la lógica EXACTA de mostrar-ranking.php:
-// Para cada jugador, recorre evento por evento y calcula:
-//   - ptosMixto: puntos del padre (categoría mixta)
-//   - ptosHijo:  si es Grupo Único → phAcum completo
-//                si NO es GU       → max(0, phAcum - ppEvt)
-//   - total = ptosMixto + ptosHijo
-// ══════════════════════════════════════════════════════════════════
+// ==================================================================
+// ACTION: ranking - Ranking de jugadores desde _ranking
+// El criterio de puntos vive en bt_ranking.functions.php, el mismo archivo
+// que usan el sitio, la app y la siembra de llaves. Antes esta accion tenia
+// su propia copia y se habia quedado con la formula vieja (restaba el padre
+// fuera de grupo unico): mostraba otros numeros que bt.com.py y que la app.
+// ==================================================================
 if ($action === 'ranking') {
-    $search   = strGet('q');
-    $idCat    = intGet('categoria', 0);
-    $limit    = intGet('limit', 50);
+    require_once __DIR__ . '/bt_ranking.functions.php';
 
-    // Obtener circuito (default 1 = Circuito Hernandariense)
+    $search     = strGet('q');
+    $idCat      = intGet('categoria', 0);
+    $limit      = intGet('limit', 50);
     $idcircuito = intGet('circuito', 1);
 
-    // Cargar mapa de categorías (id → padre, nombre)
     $catMap = [];
     $rCats = $mysqli2->query("SELECT id_categoria, id_categoria_padre, categoria FROM v_p_categorias");
     if ($rCats) while ($rc = $rCats->fetch_assoc()) {
         $catMap[(int)$rc['id_categoria']] = [
-            'padre' => (int)$rc['id_categoria_padre'],
-            'nombre' => $rc['categoria']
+            'padre'  => (int)$rc['id_categoria_padre'],
+            'nombre' => $rc['categoria'],
         ];
     }
 
-    // Determinar categorías hijo a procesar
-    $catsHijo = [];
-    foreach ($catMap as $cid => $info) {
-        if ($info['padre'] > 0) {
-            if ($idCat && $cid != $idCat) continue; // filtro de categoría
-            $catsHijo[$cid] = $info['padre'];
+    bt_rank_cargar($mysqli2, $idcircuito);
+
+    $jugadoresGlobal = [];
+    foreach ($catMap as $acategoria => $info) {
+        $padreCat = $info['padre'];
+        if ($padreCat <= 0) continue;                    // solo categorias hijo
+        if ($idCat && $acategoria != $idCat) continue;   // filtro de categoria
+
+        foreach (bt_rank_jugadores_cat($acategoria, $padreCat) as $j) {
+            $ci = (string)$j['ci'];
+            if (trim($ci) === '') continue;
+            $u = bt_rank_usuario($ci);
+            $nombre   = $u['nombre'] ?? '';
+            $apellido = $u['apellido'] ?? '';
+            if ($search !== '' && stripos(trim("$nombre $apellido"), $search) === false) continue;
+
+            $jugadoresGlobal[$ci . '_' . $acategoria] = [
+                'ci'        => $ci,
+                'nombre'    => $nombre,
+                'apellido'  => $apellido,
+                'categoria' => $info['nombre'],
+                'id_cat'    => $acategoria,
+                'ptosMixto' => $j['ptosMixto'],
+                'ptosHijo'  => $j['ptosHijo'],
+                'puntos'    => $j['total'],
+            ];
         }
     }
 
-    // Filtro de búsqueda
-    $whereBusq = '';
-    if ($search) {
-        $q = $mysqli2->real_escape_string($search);
-        $whereBusq = " AND CONCAT(u.nombre,' ',u.apellido) LIKE '%$q%'";
-    }
-
-    // Para cada categoría hijo, obtener jugadores únicos y calcular puntos evento por evento
-    $jugadoresGlobal = []; // ci => { nombre, apellido, categorias[], ptosMixto, ptosHijo, total }
-
-    foreach ($catsHijo as $acategoria => $padreCat) {
-        // Obtener jugadores únicos de esta categoría en _ranking
-        $sqlJug = "SELECT DISTINCT r.ci, u.nombre, u.apellido
-                   FROM _ranking r
-                   LEFT JOIN _p_usuarios u ON u.ci = r.ci
-                   WHERE r.circuito = $idcircuito 
-                     AND r.categoria = $acategoria
-                     AND r.puntos > 0
-                     $whereBusq";
-        $rJug = $mysqli2->query($sqlJug);
-        if (!$rJug) continue;
-
-        while ($jug = $rJug->fetch_assoc()) {
-            $ci = $jug['ci'];
-            if (empty(trim($ci))) continue;
-
-            $ptosMixtoReal = 0;
-            $ptosHijoReal  = 0;
-
-            // Recorrer eventos donde este jugador participó en esta categoría o su padre
-            $sqlEvts = "SELECT DISTINCT i.id_evento
-                        FROM _p_incripciones i
-                        JOIN _p_eventos ev ON ev.id = i.id_evento
-                        WHERE (i.ci = '$ci' OR i.ci_dupla = '$ci')
-                          AND (i.id_categoria = $acategoria OR i.id_categoria = $padreCat)
-                          AND ev.id_circuito = $idcircuito";
-            $rEvts = $mysqli2->query($sqlEvts);
-            if (!$rEvts) continue;
-
-            while ($rowEvt = $rEvts->fetch_assoc()) {
-                $evId = (int)$rowEvt['id_evento'];
-
-                // ¿Es Grupo Único? (tiene etiquetas POS1-POS4)
-                $resGU = $mysqli2->query("SELECT COUNT(*) as total 
-                    FROM _relacion_etiquetas_eventos r
-                    JOIN _p_etiquetas e ON r.id_etiqueta = e.id
-                    WHERE r.id_evento = $evId 
-                      AND r.id_categoria IN ($acategoria, $padreCat)
-                      AND e.value IN ('POS1','POS2','POS3','POS4','POS5')");
-                $esGU = ($resGU && $resGU->fetch_assoc()['total'] > 0);
-
-                // Puntos del padre en este evento
-                $resPP = $mysqli2->query("SELECT puntos FROM _ranking 
-                    WHERE evento = $evId AND circuito = $idcircuito 
-                    AND ci = '$ci' AND categoria = $padreCat");
-                $ppEvt = ($r2 = ($resPP ? $resPP->fetch_assoc() : null)) ? abs($r2['puntos']) : 0;
-
-                // Puntos del hijo en este evento
-                $resPH = $mysqli2->query("SELECT puntos FROM _ranking 
-                    WHERE evento = $evId AND circuito = $idcircuito 
-                    AND ci = '$ci' AND categoria = $acategoria");
-                $phAcum = ($r2 = ($resPH ? $resPH->fetch_assoc() : null)) ? abs($r2['puntos']) : 0;
-
-                $ptosMixtoReal += $ppEvt;
-                $ptosHijoReal  += $esGU ? $phAcum : max(0, $phAcum - $ppEvt);
-            }
-
-            $totalReal = $ptosMixtoReal + $ptosHijoReal;
-            $catNombre = $catMap[$acategoria]['nombre'] ?? "Cat. $acategoria";
-
-            // Acumular: si un jugador está en múltiples categorías hijo, 
-            // cada una se suma por separado (como en el ranking público)
-            if (!isset($jugadoresGlobal[$ci . '_' . $acategoria])) {
-                $jugadoresGlobal[$ci . '_' . $acategoria] = [
-                    'ci'        => $ci,
-                    'nombre'    => $jug['nombre'] ?? '',
-                    'apellido'  => $jug['apellido'] ?? '',
-                    'categoria' => $catNombre,
-                    'id_cat'    => $acategoria,
-                    'ptosMixto' => $ptosMixtoReal,
-                    'ptosHijo'  => $ptosHijoReal,
-                    'puntos'    => $totalReal,
-                ];
-            }
-        }
-    }
-
-    // Si NO hay filtro de categoría, agrupar por CI sumando todas las categorías
-    $ranking = [];
+    // Sin filtro de categoria se agrupa por CI sumando todas sus categorias.
     if ($idCat) {
-        // Con filtro: una fila por jugador en esa categoría
         $ranking = array_values($jugadoresGlobal);
     } else {
-        // Sin filtro: sumar puntos de todas las categorías por jugador
         $agrupado = [];
         foreach ($jugadoresGlobal as $j) {
             $ci = $j['ci'];
@@ -619,21 +546,15 @@ if ($action === 'ranking') {
                     'categoria' => $j['categoria'],
                     'puntos'    => 0,
                 ];
-            } else {
-                // Concatenar nombres de categorías
-                if (strpos($agrupado[$ci]['categoria'], $j['categoria']) === false) {
-                    $agrupado[$ci]['categoria'] .= ', ' . $j['categoria'];
-                }
+            } elseif (strpos($agrupado[$ci]['categoria'], $j['categoria']) === false) {
+                $agrupado[$ci]['categoria'] .= ', ' . $j['categoria'];
             }
             $agrupado[$ci]['puntos'] += $j['puntos'];
         }
         $ranking = array_values($agrupado);
     }
 
-    // Ordenar por puntos desc
     usort($ranking, function($a, $b) { return $b['puntos'] <=> $a['puntos']; });
-
-    // Aplicar limit
     $ranking = array_slice($ranking, 0, $limit);
 
     resp(['success' => true, 'ranking' => $ranking, 'total' => count($ranking)]);

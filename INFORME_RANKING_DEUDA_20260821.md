@@ -118,6 +118,8 @@ un evento y con un botón de "recalcular" en el admin. Las 4 lecturas pasan a se
 **A ahora** (la divergencia está viva y son 20 minutos), **B en la próxima ventana**. C sólo si
 más adelante el ranking se vuelve lento o aparece un quinto consumidor.
 
+> **21-ago: se aplicó la opción B.** El resultado, al final del documento.
+
 ## Cómo verificar cualquiera de las tres
 
 1. Antes de tocar: bajar el CSV oficial (`ranking_export.php?url=<slug>`) y guardarlo.
@@ -134,3 +136,54 @@ más adelante el ranking se vuelve lento o aparece un quinto consumidor.
 `logica/grafico-llaves.incTMP.php:421` tiene la clave de acceso escrita en el código
 (`$RK_SECRET = 'c61f...'`). Con ese parámetro en la URL se ven los puntos de cada pareja. No lo
 toqué; si se quiere, va a `/home/bt.com.py/.bt_app.env` como el resto de la config.
+
+
+---
+
+# CERRADO — 21-ago-2026: se aplicó la opción B
+
+Se creó **`bt_ranking.functions.php`** y los cuatro consumidores pasaron a usarlo. Las cuatro
+copias del criterio dejaron de existir: ahora hay una sola.
+
+| Archivo | Antes | Ahora |
+|---|---|---|
+| `bt_ranking.functions.php` | — | **la única implementación** (`bt_rank_cargar`, `bt_rank_total`, `bt_rank_detalle`, `bt_rank_jugadores_cat`) |
+| `logica/mostrar-ranking.php` | criterio escrito 3 veces + precarga propia | llama al módulo (−116 líneas) |
+| `bt_app_api.php` | copia propia con N+1 | llama al módulo |
+| `tvt_api.php` | **fórmula vieja** | llama al módulo |
+| `logica/grafico-llaves.incTMP.php` | **fórmula vieja** | llama al módulo |
+
+## Verificación (esto es lo que asegura que no se perdió nada)
+
+1. **Baseline antes de tocar**: se guardó el HTML completo del ranking público y el JSON del
+   endpoint de la app.
+2. **Prueba sin tocar producción**: la versión nueva se subió como copia paralela
+   (`ranking_test_nuevo.php`) y se comparó contra el baseline → **idéntica salvo una etiqueta
+   `og:url`**, que dependía del nombre del archivo de prueba.
+3. **Después de desplegar**: `ranking.php` en vivo quedó **byte por byte igual al baseline**.
+4. **Export CSV** (que usa la misma función): sigue saliendo con los mismos números.
+5. **App**: ningún jugador cambió de total ni de desglose. Cambió lo que tenía que cambiar:
+   - se eliminó un **jugador duplicado** (CI 6560193 aparecía dos veces, como "Walber Souza" y
+     "Walber Castro", y su puntaje se contaba dos veces en el Top 10);
+   - 111 posiciones se movieron **entre jugadores empatados** y 155 desgloses quedaron ordenados
+     por fecha ascendente: los dos casos ahora siguen el mismo criterio de desempate que el sitio.
+6. **Admin**: comparado jugador por jugador contra la app en la categoría 3 → **55 de 55 iguales**.
+   Antes esa pantalla mostraba otros números.
+7. **Siembra de llaves**: la página carga sin errores y ahora muestra los mismos puntos que el
+   ranking (940, 930, 900, 715…), no los de la fórmula muerta.
+
+**No se tocó un solo dato**: todo esto es código de lectura. `_ranking` no se recalculó ni se
+escribió, y las categorías 4/5/9/10 congeladas siguen exactamente como estaban.
+
+## Respaldos en el servidor
+
+`logica/mostrar-ranking.php.bak-20260821`, `bt_app_api.php.bak-20260821`,
+`tvt_api.php.bak-20260821b`, `logica/grafico-llaves.incTMP.php.bak-20260821`.
+
+## Gancho para la próxima vez
+
+El día que cambie el criterio de puntos, se toca **un solo archivo**. Y si aparece un quinto
+consumidor, que llame a `bt_rank_total()` en vez de copiar la cuenta.
+
+Queda pendiente, aparte y anotado: `$RK_SECRET` sigue escrito en el código de
+`logica/grafico-llaves.incTMP.php:421`.

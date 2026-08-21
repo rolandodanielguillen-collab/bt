@@ -61,110 +61,32 @@ while($rowCat = $resultadoCat->fetch_assoc()):
 	$CatDisponibles[$rowCat['id_categoria']][2]=$rowCat['categoria'];
 endwhile;
 
-// ═══ PRECARGA: todo el dato de la página en 4 queries; el resto son lookups en memoria ═══
-$usuariosIdx=array();
-$resPre=$mysqli2->query("SELECT ci, nombre, apellido FROM _p_usuarios");
-// primera fila por ci (hay CIs duplicados en _p_usuarios; fetch_assoc tomaba la primera)
-while($rPre=$resPre->fetch_assoc()) if(!isset($usuariosIdx[$rPre['ci']])) $usuariosIdx[$rPre['ci']]=$rPre;
+// PRECARGA: el criterio de puntos vive en bt_ranking.functions.php
+// Una sola implementacion para el sitio, la app, el admin y la siembra de llaves.
+// Antes estaba copiado en los cuatro y dos se habian desincronizado.
+require_once __DIR__ . '/../bt_ranking.functions.php';
+
+// Busqueda por CI suelta: un ci que esta en _ranking pero no en _p_usuarios
+// igual tiene que salir (antes se colaba por el `|| ci===$q` del filtro).
+if($filterCis!==null && isset($q) && $q!=='') $filterCis[$q]=true;
+
+$rk            = bt_rank_cargar($mysqli2, $idcircuito, $filterCis);
+$usuariosIdx   = $rk['usuarios'];
+$rankRows      = $rk['rankRows'];
+$rankIdx       = $rk['rankIdx'];
+$inscIdx       = $rk['inscIdx'];
+$eventoNombre  = $rk['eventoNombre'];
+$ACategorias   = $rk['categorias'];
+$puntosAll     = $rk['puntosAll'];
+$cantidadPxCat = $rk['cantidadPxCat'];
 
 $catNombreIdx=array();
 $resPre=$mysqli2->query("SELECT id, categoria FROM _p_categorias");
 while($rPre=$resPre->fetch_assoc()) $catNombreIdx[$rPre['id']]=$rPre['categoria'];
 
-// _ranking completo del circuito: filas + índice evento→categoria→ci = puntos
-// (se conserva la primera fila por clave, igual que el fetch_assoc de las queries puntuales)
-$rankRows=array();
-$rankIdx=array();
-$resPre=$mysqli2->query("SELECT * FROM _ranking WHERE circuito={$idcircuito}");
-while($rPre=$resPre->fetch_assoc()){
-	$rankRows[]=$rPre;
-	if(!isset($rankIdx[$rPre['evento']][$rPre['categoria']][$rPre['ci']]))
-		$rankIdx[$rPre['evento']][$rPre['categoria']][$rPre['ci']]=abs($rPre['puntos']);
-}
-
-// inscripciones del circuito: ci→categoria→evento (titular y dupla) + nombres de evento
-$inscIdx=array();
-$eventoNombre=array();
-$resPre=$mysqli2->query("SELECT i.ci, i.ci_dupla, i.id_categoria, i.id_evento, e.evento
-	FROM _p_incripciones i JOIN _p_eventos e ON e.id=i.id_evento
-	WHERE e.id_circuito={$idcircuito}");
-while($rPre=$resPre->fetch_assoc()){
-	$eventoNombre[$rPre['id_evento']]=$rPre['evento'];
-	if($rPre['ci']!==null && $rPre['ci']!=='')             $inscIdx[$rPre['ci']][$rPre['id_categoria']][$rPre['id_evento']]=true;
-	if($rPre['ci_dupla']!==null && $rPre['ci_dupla']!=='') $inscIdx[$rPre['ci_dupla']][$rPre['id_categoria']][$rPre['id_evento']]=true;
-}
-
-// eventos DISTINCT de un jugador en la categoría o su padre, dentro del circuito
-function rk_eventos($ci,$catHijo,$catPadre){
-	global $inscIdx;
-	$evts=array();
-	if(isset($inscIdx[$ci][$catHijo]))  $evts += $inscIdx[$ci][$catHijo];
-	if(isset($inscIdx[$ci][$catPadre])) $evts += $inscIdx[$ci][$catPadre];
-	ksort($evts);
-	return array_keys($evts);
-}
-function rk_puntos($evento,$categoria,$ci){
-	global $rankIdx;
-	return isset($rankIdx[$evento][$categoria][$ci]) ? $rankIdx[$evento][$categoria][$ci] : 0;
-}
-
-// Jugadores de una categoría con su total real evento-por-evento, ordenados desc.
-// Fuente única: la usan el render (FASE 1) y el export CSV.
-function rk_jugadores_cat($acategoria,$padreCat){
-	global $puntosAll;
-	$jugadores=array();
-	$yaVisto=array();
-	foreach($puntosAll as $cadaPunto){
-		if(!isset($cadaPunto[$acategoria])) continue;
-		foreach($cadaPunto[$acategoria] as $cadaParticipante){
-			$ci=$cadaParticipante[0];
-			if(isset($yaVisto[$ci])) continue;
-			$yaVisto[$ci]=true;
-
-			$ptosMixto=0;
-			$ptosHijo=0;
-			foreach(rk_eventos($ci,$acategoria,$padreCat) as $evId){
-				// FIX 02/06/2026: puntos puros, sin restar padre
-				$ptosMixto += rk_puntos($evId,$padreCat,$ci);
-				$ptosHijo  += rk_puntos($evId,$acategoria,$ci);
-			}
-
-			$jugadores[]=array(
-				'ci'        => $ci,
-				'idRanking' => $cadaParticipante[2],
-				'ptosMixto' => $ptosMixto,
-				'ptosHijo'  => $ptosHijo,
-				'total'     => $ptosMixto + $ptosHijo,
-			);
-		}
-	}
-	usort($jugadores, fn($a,$b) => $b['total'] <=> $a['total']);
-	return $jugadores;
-}
-
-if(isset($_GET['debug'])): echo __LINE__." precarga: ".count($rankRows)." ranking / ".count($inscIdx)." cis / ".count($usuariosIdx)." usuarios"; echo "<pre>"; print_r($CatDisponibles); echo "</pre>"; endif;
-
-$mostrado=array();
-foreach($rankRows as $row){
-	if($filterCis!==null && !isset($filterCis[$row['ci']]) && (string)$row['ci']!==(string)$q) continue;
-	$ACategorias[$row['categoria']]=$row['categoria'];
-	if(!isset($puntosxJugador[$row['categoria']][$row['ci']])) $puntosxJugador[$row['categoria']][$row['ci']][0]=0;
-	$puntosxJugador[$row['categoria']][$row['ci']][0]=abs($puntosxJugador[$row['categoria']][$row['ci']][0]) + $row['puntos'];
-	if(isset($_GET['debug'])) echo __LINE__."<div>{$row['puntos']}</div>";
-	$lospuntos=abs($puntosxJugador[$row['categoria']][$row['ci']][0]);
-	$puntosAll[$lospuntos][$row['categoria']][$row['ci']][0]=$row['ci'];
-	if(strlen(trim($row['ci']))==0 && isset($_GET['debug'])) echo "<div> alert ".$row['id']."</div>";
-	$puntosAll[$lospuntos][$row['categoria']][$row['ci']][1]=$lospuntos;
-	$puntosAll[$lospuntos][$row['categoria']][$row['ci']][2]=$row['id'];
-	$puntosAll[$lospuntos][$row['categoria']][$row['ci']][3]=$row['pos'];
-	if(!isset($mostrado[$row['categoria']][$row['ci']])):
-		$mostrado[$row['categoria']][$row['ci']]=true;
-		if(!isset($cantidadPxCat[$row['categoria']])) $cantidadPxCat[$row['categoria']]=0;
-		$cantidadPxCat[$row['categoria']]=abs($cantidadPxCat[$row['categoria']])+1;
-	endif;
-}
-krsort($puntosAll);
-if(isset($_GET['debug'])): echo "-".__LINE__; echo "<pre>"; print_r($puntosAll); print_r($puntosxJugador); print_r($cantidadPxCat); echo "</pre>"; endif;
+// El render y el export CSV siguen llamandola por este nombre.
+function rk_jugadores_cat($acategoria,$padreCat){ return bt_rank_jugadores_cat($acategoria,$padreCat); }
+if(isset($_GET['debug'])): echo "-".__LINE__; echo "<pre>"; print_r($puntosAll); print_r($cantidadPxCat); echo "</pre>"; endif;
 
 // ═══ EXPORT CSV (lo setea ranking_export.php): mismos datos que el render, sin HTML ═══
 if(isset($csvExport)):
@@ -217,15 +139,7 @@ foreach($ACategorias as $acategoria):
             if(isset($top10Visto[$keyT])) continue;
             $top10Visto[$keyT] = true;
 
-            $ptosMixtoT = 0; $ptosHijoT = 0;
-
-            foreach(rk_eventos($ciT,$acategoria,$padreCatT) as $evIdT):
-                // FIX 02/06/2026: puntos puros, sin restar padre
-                $ptosMixtoT += rk_puntos($evIdT,$padreCatT,$ciT);
-                $ptosHijoT  += rk_puntos($evIdT,$acategoria,$ciT);
-            endforeach;
-
-            $totalT = $ptosMixtoT + $ptosHijoT;
+            $totalT = bt_rank_total($ciT,$acategoria,$padreCatT)['total'];
             if($totalT > 0):
                 if(!isset($top10Global[$ciT])):
                     $rowNomT=isset($usuariosIdx[$ciT]) ? $usuariosIdx[$ciT] : null;
@@ -768,20 +682,16 @@ foreach($jugadoresCat as $jug):
 	// Detalle por evento
 	$detailHtml='';
 	if(!isset($_GET['debugv3'])):
-		foreach(rk_eventos($ci,$acategoria,$padreCat) as $evIdD):
-			$ptsPadre = rk_puntos($evIdD,$padreCat,$ci);
-			// FIX 02/06/2026: puntos puros, sin restar padre
-			$ptsHijaD = rk_puntos($evIdD,$acategoria,$ci);
-
-			if($ptsHijaD > 0 || $ptsPadre > 0):
-				$nombreEvD = isset($eventoNombre[$evIdD]) ? $eventoNombre[$evIdD] : '';
+		foreach(bt_rank_detalle($ci,$acategoria,$padreCat) as $fila):
+				$nombreEvD = $fila['evento'];
+				$ptsPadre  = $fila['ptsPadre'];
+				$ptsHijaD  = $fila['ptsCategoria'];
 				$detailHtml.="
 				<div class='rk-det-row'>
 					<div class='rk-det-label'>{$nombreEvD}</div>
 					<div class='rk-det-val rk-det-val-mix'>{$ptsPadre}</div>
 					<div class='rk-det-val'>{$ptsHijaD}</div>
 				</div>";
-			endif;
 		endforeach;
 	endif;
 ?>

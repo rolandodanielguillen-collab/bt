@@ -438,59 +438,21 @@ function rk_estado_pago($ci){
                                     endif;
                                     if(!isset($idCircuitoEv)) $idCircuitoEv = 0;
 
-                                    // Closure para obtener puntos
-                                    // ANTES: SUM(puntos) directo — no distinguía grupo único vs bracket
-                                    // y para categorías hijo sumaba incorrectamente el padre
-                                    // AHORA: replica la misma lógica de mostrar-ranking.php
-                                    $fnPts = function($ci, $idCat) use ($idCircuitoEv, $idEventos, $mysqli2, $esAdmin){
+                                    // Puntos para sembrar: MISMO criterio que el ranking del sitio y la app
+                                    // (bt_ranking.functions.php). Antes esta pantalla tenia su propia copia con
+                                    // la formula vieja y ordenaba con numeros que ya no usaba nadie mas.
+                                    require_once __DIR__ . '/../bt_ranking.functions.php';
+                                    $fnPts = function($ci, $idCat) use ($idCircuitoEv, $mysqli2, $esAdmin){
                                         if(!$esAdmin || !$ci || !$idCircuitoEv) return 0;
-
-                                        // Obtener categoría padre
-                                        $resPadre=$mysqli2->query("SELECT id_categoria_padre FROM v_p_categorias WHERE id_categoria={$idCat} LIMIT 1");
-                                        $rowPadre=$resPadre ? $resPadre->fetch_assoc() : null;
-                                        $idPadre = $rowPadre ? (int)$rowPadre['id_categoria_padre'] : 0;
-
-                                        // Obtener todos los eventos del circuito donde participó este CI en esta categoría
-                                        $resEvts=$mysqli2->query("SELECT DISTINCT _p_incripciones.id_evento
-                                            FROM _p_incripciones
-                                            JOIN _p_eventos ON _p_eventos.id=_p_incripciones.id_evento
-                                            WHERE (_p_incripciones.ci='{$ci}' OR _p_incripciones.ci_dupla='{$ci}')
-                                            AND _p_incripciones.id_categoria={$idCat}
-                                            AND _p_eventos.id_circuito={$idCircuitoEv}");
-
-                                        $totalPts = 0;
-                                        while($rowEvt=$resEvts->fetch_assoc()){
-                                            $evId=$rowEvt['id_evento'];
-
-                                            // Detectar grupo único: busca POS en categoría hija O padre
-                                            $inClause = $idPadre > 0 ? "{$idCat},{$idPadre}" : "{$idCat}";
-                                            $resGU=$mysqli2->query("SELECT COUNT(*) as total FROM _relacion_etiquetas_eventos r
-                                                JOIN _p_etiquetas e ON r.id_etiqueta=e.id
-                                                WHERE r.id_evento={$evId} AND r.id_categoria IN ({$inClause})
-                                                AND e.value IN ('POS1','POS2','POS3','POS4')");
-                                            $esGU = ($resGU->fetch_assoc()['total'] > 0);
-
-                                            // Puntos del padre en este evento
-                                            $ppEvt = 0;
-                                            if($idPadre > 0){
-                                                $resPP=$mysqli2->query("SELECT puntos FROM _ranking 
-                                                    WHERE evento={$evId} AND circuito={$idCircuitoEv} 
-                                                    AND ci='{$ci}' AND categoria={$idPadre}");
-                                                $ppEvt = ($r=$resPP->fetch_assoc()) ? abs($r['puntos']) : 0;
-                                            }
-
-                                            // Puntos del hijo en este evento (acumulados en BD)
-                                            $resPH=$mysqli2->query("SELECT puntos FROM _ranking 
-                                                WHERE evento={$evId} AND circuito={$idCircuitoEv} 
-                                                AND ci='{$ci}' AND categoria={$idCat}");
-                                            $phAcum = ($r=$resPH->fetch_assoc()) ? abs($r['puntos']) : 0;
-
-                                            // Mismo cálculo que mostrar-ranking.php
-                                            $ptsMixto = $ppEvt;
-                                            $ptsHijo  = $esGU ? $phAcum : max(0, $phAcum - $ppEvt);
-                                            $totalPts += $ptsMixto + $ptsHijo;
+                                        static $cargado = null;
+                                        static $padres  = array();
+                                        if($cargado !== $idCircuitoEv){ bt_rank_cargar($mysqli2, $idCircuitoEv); $cargado = $idCircuitoEv; }
+                                        if(!isset($padres[$idCat])){
+                                            $resPadre=$mysqli2->query("SELECT id_categoria_padre FROM v_p_categorias WHERE id_categoria={$idCat} LIMIT 1");
+                                            $rowPadre=$resPadre ? $resPadre->fetch_assoc() : null;
+                                            $padres[$idCat] = $rowPadre ? (int)$rowPadre['id_categoria_padre'] : 0;
                                         }
-                                        return $totalPts;
+                                        return bt_rank_total($ci, $idCat, $padres[$idCat])['total'];
                                     };
 
                                     // Construir array de parejas
