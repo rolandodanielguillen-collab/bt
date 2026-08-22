@@ -16,8 +16,10 @@ const BT_LOG_VERBOS = ['crear', 'editar', 'eliminar', 'borrar', 'guardar', 'defi
                        'cambiar', 'generar', 'regenerar', 'asignar', 'quitar', 'limpiar',
                        'toggle', 'agregar', 'actualizar', 'promover', 'en_juego'];
 
-// Nunca guardar el valor de estos parámetros (aunque hoy no viajen por querystring).
-const BT_LOG_OCULTOS = ['pass', 'password', 'clave', 'token', 'su_token'];
+// Nunca guardar el valor de estos parámetros. 'pase' es la contraseña real (texto
+// plano) de admins y de jugadores: viaja por querystring en create/update_admin y
+// en crear/editar_jugador, y sin esto quedaba escrita en claro en _bt_log.
+const BT_LOG_OCULTOS = ['pass', 'password', 'clave', 'token', 'su_token', 'pase'];
 
 function bt_log_es_escritura(string $accion): bool {
     foreach (BT_LOG_VERBOS as $v) {

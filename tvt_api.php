@@ -1230,12 +1230,13 @@ if ($action === 'editar_jugador') {
     $id = intGet('id');
     if (!$id) respErr('Falta ID');
 
-    $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion'];
+    $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion','pase'];
     // Con STRICT_TRANS_TABLES, '' no es válido en date ni en enum: hay que mandar
     // NULL. Y en las columnas NOT NULL, el campo vacío se ignora (antes cualquiera
     // de los dos casos tiraba un fatal y el navegador se quedaba sin respuesta).
     $vacioEsNull   = ['fecha_nacimiento', 'sexo', 'estado'];
-    $vacioSeIgnora = ['ci', 'tipo'];
+    // 'pase' vacío = el admin no quiso tocar la contraseña, no "borrarla".
+    $vacioSeIgnora = ['ci', 'tipo', 'pase'];
     $sets = [];
     foreach ($campos as $c) {
         if (!isset($_GET[$c])) continue;
@@ -1266,7 +1267,7 @@ if ($action === 'crear_jugador') {
     $dup = $mysqli2->query("SELECT id FROM _p_usuarios WHERE ci = '{$ci}' LIMIT 1");
     if ($dup && $dup->num_rows > 0) respErr('Ya existe un jugador con CI ' . $ci);
 
-    $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion'];
+    $campos = ['nombre','apellido','ci','email','cel','sexo','estado','tipo','fecha_nacimiento','ciudad','nacionalidad','whatsapp','observacion','pase'];
     $cols = []; $vals = [];
     foreach ($campos as $c) {
         $v = trim(strGet($c));

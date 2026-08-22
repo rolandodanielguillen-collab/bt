@@ -507,7 +507,7 @@ tr:hover td{background:var(--bg-hover)}
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">CI</label><input class="fs" id="jugEditCi"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Email</label><input class="fs" id="jugEditEmail"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Celular</label><input class="fs" id="jugEditCel"></div>
-          <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">WhatsApp</label><input class="fs" id="jugEditWhatsapp"></div>
+          <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Contraseña</label><input class="fs" id="jugEditPase" autocomplete="off" placeholder="vacío = no cambiar"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Sexo</label>
             <select class="fs" id="jugEditSexo"><option value="hombre">Hombre</option><option value="mujer">Mujer</option><option value="mixto">Mixto</option></select>
           </div>
@@ -3818,7 +3818,7 @@ async function editarJugador(id) {
   document.getElementById('jugEditCi').value = j.ci || '';
   document.getElementById('jugEditEmail').value = j.email || '';
   document.getElementById('jugEditCel').value = j.cel || '';
-  document.getElementById('jugEditWhatsapp').value = j.whatsapp || '';
+  document.getElementById('jugEditPase').value = j.pase || '';
   document.getElementById('jugEditSexo').value = j.sexo || 'hombre';
   document.getElementById('jugEditFechaNac').value = j.fecha_nacimiento || '';
   document.getElementById('jugEditCiudad').value = j.ciudad || '';
@@ -3837,7 +3837,7 @@ function nuevoJugador() {
   document.getElementById('jugEditCi').value = '';
   document.getElementById('jugEditEmail').value = '';
   document.getElementById('jugEditCel').value = '';
-  document.getElementById('jugEditWhatsapp').value = '';
+  document.getElementById('jugEditPase').value = '';
   document.getElementById('jugEditSexo').value = 'hombre';
   document.getElementById('jugEditFechaNac').value = '';
   document.getElementById('jugEditCiudad').value = '';
@@ -3858,7 +3858,7 @@ async function guardarJugador() {
     ci: document.getElementById('jugEditCi').value,
     email: document.getElementById('jugEditEmail').value,
     cel: document.getElementById('jugEditCel').value,
-    whatsapp: document.getElementById('jugEditWhatsapp').value,
+    pase: document.getElementById('jugEditPase').value,
     sexo: document.getElementById('jugEditSexo').value,
     fecha_nacimiento: document.getElementById('jugEditFechaNac').value,
     ciudad: document.getElementById('jugEditCiudad').value,
