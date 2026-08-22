@@ -216,6 +216,11 @@ tr:hover td{background:var(--bg-hover)}
 .fi,.fs{width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:14px;font-family:var(--font);transition:var(--tr)}
 .fi:focus,.fs:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .fs{cursor:pointer}
+/* Campo de contrasena con ojito */
+.pw-wrap{position:relative;display:block}
+.pw-wrap input{padding-right:40px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;color:var(--text-muted);cursor:pointer;border-radius:50%;transition:var(--tr)}
+.pw-eye:hover{background:var(--bg-hover);color:var(--text-primary)}
 
 /* Modal */
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;padding:16px}
@@ -511,7 +516,9 @@ tr:hover td{background:var(--bg-hover)}
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">CI</label><input class="fs" id="jugEditCi"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Email</label><input class="fs" id="jugEditEmail"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Celular</label><input class="fs" id="jugEditCel"></div>
-          <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Contraseña</label><input class="fs" id="jugEditPase" autocomplete="off" placeholder="vacío = no cambiar"></div>
+          <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Contraseña</label>
+            <span class="pw-wrap"><input class="fs" id="jugEditPase" type="password" autocomplete="new-password" placeholder="vacío = no cambiar"><button type="button" class="pw-eye" onclick="pwToggle(this)" title="Mostrar contraseña"><i class="fas fa-eye"></i></button></span>
+          </div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Sexo</label>
             <select class="fs" id="jugEditSexo"><option value="hombre">Hombre</option><option value="mujer">Mujer</option><option value="mixto">Mixto</option></select>
           </div>
@@ -3812,6 +3819,24 @@ async function loadJugadores(page) {
   pagDiv.innerHTML = html;
 }
 
+// Ojito de los campos de contraseña. El input arranca SIEMPRE oculto: pwHide() se
+// llama al abrir cada modal, si no queda revelado de la vez anterior.
+function pwToggle(btn) {
+  const inp = btn.previousElementSibling;
+  const revelar = inp.type === 'password';
+  inp.type = revelar ? 'text' : 'password';
+  btn.firstElementChild.className = revelar ? 'fas fa-eye-slash' : 'fas fa-eye';
+  btn.title = revelar ? 'Ocultar contraseña' : 'Mostrar contraseña';
+}
+
+function pwHide(id) {
+  const inp = document.getElementById(id);
+  if (!inp) return;
+  inp.type = 'password';
+  const btn = inp.nextElementSibling;
+  if (btn) { btn.firstElementChild.className = 'fas fa-eye'; btn.title = 'Mostrar contraseña'; }
+}
+
 async function editarJugador(id) {
   const r = await api({ action: 'get_jugador', id });
   if (!r.success) return alert(r.error);
@@ -3823,6 +3848,7 @@ async function editarJugador(id) {
   document.getElementById('jugEditEmail').value = j.email || '';
   document.getElementById('jugEditCel').value = j.cel || '';
   document.getElementById('jugEditPase').value = j.pase || '';
+  pwHide('jugEditPase');
   document.getElementById('jugEditSexo').value = j.sexo || 'hombre';
   document.getElementById('jugEditFechaNac').value = j.fecha_nacimiento || '';
   document.getElementById('jugEditCiudad').value = j.ciudad || '';
@@ -3842,6 +3868,7 @@ function nuevoJugador() {
   document.getElementById('jugEditEmail').value = '';
   document.getElementById('jugEditCel').value = '';
   document.getElementById('jugEditPase').value = '';
+  pwHide('jugEditPase');
   document.getElementById('jugEditSexo').value = 'hombre';
   document.getElementById('jugEditFechaNac').value = '';
   document.getElementById('jugEditCiudad').value = '';
@@ -3935,6 +3962,7 @@ async function editAdmin(id){
   document.getElementById('admId').value=r.admin.id;
   document.getElementById('admUser').value=r.admin.usuario;
   document.getElementById('admPass').value=r.admin.pase;
+  pwHide('admPass');
   document.getElementById('admTipo').value=r.admin.tipo;
   document.getElementById('modalAdminTitle').innerHTML='<i class="fas fa-user-shield" style="margin-right:8px;color:var(--accent);"></i>Editar Admin';
   openModal('modalAdmin');
@@ -3954,6 +3982,7 @@ async function saveAdmin(){
     document.getElementById('admId').value='';
     document.getElementById('admUser').value='';
     document.getElementById('admPass').value='';
+    pwHide('admPass');
     document.getElementById('admTipo').value='cliente';
     document.getElementById('modalAdminTitle').innerHTML='<i class="fas fa-user-shield" style="margin-right:8px;color:var(--accent);"></i>Nuevo Admin';
     loadAdmins();
@@ -4203,7 +4232,7 @@ async function copiarPuntajes(){
     <div class="modal-b">
       <input type="hidden" id="admId">
       <div class="fg"><label class="fl">Usuario</label><input class="fi" id="admUser" placeholder="Nombre de usuario"></div>
-      <div class="fg"><label class="fl">Contraseña</label><input class="fi" id="admPass" type="text" placeholder="Contraseña"></div>
+      <div class="fg"><label class="fl">Contraseña</label><span class="pw-wrap"><input class="fi" id="admPass" type="password" autocomplete="new-password" placeholder="Contraseña"><button type="button" class="pw-eye" onclick="pwToggle(this)" title="Mostrar contraseña"><i class="fas fa-eye"></i></button></span></div>
       <div class="fg"><label class="fl">Tipo</label>
         <select class="fs" id="admTipo"><option value="cliente">Cliente</option><option value="superadmin">Superadmin</option></select>
       </div>
