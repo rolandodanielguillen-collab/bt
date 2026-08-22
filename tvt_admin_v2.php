@@ -202,7 +202,8 @@ tr:hover td{background:var(--bg-hover)}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:var(--tr);font-family:var(--font);white-space:nowrap}
-.btn-p{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-p:hover{background:var(--accent-hover)}
+/* btn-pr: alias historico de btn-p. Se usa en Inscripciones, Jugadores y Log; sin esto esos botones quedaban sin color. */
+.btn-p,.btn-pr{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-p:hover,.btn-pr:hover{background:var(--accent-hover)}
 .btn-gh{background:transparent;color:var(--text-secondary);border-color:var(--border)}.btn-gh:hover{background:var(--bg-hover);color:var(--text-primary)}
 .btn-ok{background:var(--success);color:#fff}.btn-ok:hover{opacity:.9}
 .btn-no{background:var(--danger);color:#fff}.btn-no:hover{opacity:.9}
@@ -498,9 +499,12 @@ tr:hover td{background:var(--bg-hover)}
 
     <!-- Modal Editar Jugador -->
     <div class="modal-ov" id="mdJugEdit">
-      <div class="modal-box" style="max-width:560px;">
-        <div class="modal-hdr"><span id="mdJugTitle">Editar Jugador</span><button class="modal-x" onclick="closeModal('mdJugEdit')">&times;</button></div>
-        <div class="modal-body" style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-h">
+          <h3><i class="fas fa-user" style="margin-right:8px;color:var(--accent);"></i><span id="mdJugTitle">Editar Jugador</span></h3>
+          <button class="modal-x" onclick="closeModal('mdJugEdit')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-b" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <input type="hidden" id="jugEditId">
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Nombre</label><input class="fs" id="jugEditNombre"></div>
           <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Apellido</label><input class="fs" id="jugEditApellido"></div>
@@ -522,9 +526,9 @@ tr:hover td{background:var(--bg-hover)}
           </div>
           <div style="grid-column:1/-1;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Observación</label><textarea class="fs" id="jugEditObs" rows="2" style="width:100%;resize:vertical;"></textarea></div>
         </div>
-        <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">
-          <button class="btn btn-gh btn-sm" onclick="closeModal('mdJugEdit')">Cancelar</button>
-          <button class="btn btn-pr btn-sm" onclick="guardarJugador()"><i class="fas fa-save"></i> Guardar</button>
+        <div class="modal-f">
+          <button class="btn btn-gh" onclick="closeModal('mdJugEdit')">Cancelar</button>
+          <button class="btn btn-p" onclick="guardarJugador()"><i class="fas fa-save"></i> Guardar</button>
         </div>
       </div>
     </div>
